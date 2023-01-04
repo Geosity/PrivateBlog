@@ -45,136 +45,6 @@ p\left(x_{S_{t-1}} \mid x_{S_t}\right) =\mathcal{N}\left(\mu_\theta\left(x_{S_t}
       </tags>
   </entry>
   <entry>
-    <title>基于分数(score-based)的扩散(Diffusion)模型</title>
-    <url>/2022/10/17/Score-based%20Diffusion%20Model/</url>
-    <content><![CDATA[<p>基于分数的的扩散模型，<br>原文章：<a href="https://arxiv.org/abs/2011.13456">Score-Based Generative Modeling through Stochastic Differential Equations</a></p>
-<h1 id="一、直观理解"><a href="#一、直观理解" class="headerlink" title="一、直观理解"></a>一、直观理解</h1><p>将反向降噪过程中的降噪建模成一个<strong>粒子随机运动过程</strong>，然后用langevin方程描述这个粒子随机运动，并求出一个稳定解，得出降噪过程噪点运动的物理规律，从而引导噪声的分布向原数据分布的特征进行运动，从而达到生成数据的目的。<br><img src="/images/score_based_diff/Pasted image 20221128202716.png" alt="Overview of the Score-based Diffusion Model"></p>
-<h1 id="二、正向扩散过程"><a href="#二、正向扩散过程" class="headerlink" title="二、正向扩散过程"></a>二、正向扩散过程</h1><h2 id="随机微分方程建模（从离散到连续）"><a href="#随机微分方程建模（从离散到连续）" class="headerlink" title="随机微分方程建模（从离散到连续）"></a>随机微分方程建模（从离散到连续）</h2><p>思路依然是基于DDPM的分解方法，将噪音添加的过程分为 $T$ 步。只是DDPM中这个步数 $T$ 是人为设计的、<strong>离散的</strong>，按照直观的理解，这个噪音添加包括降噪的过程应该是连续的，为了消除这个人为的影响。</p>
-<p>这里就用一个随机微分方程（SDE）进行建模，使得diffusion的正向、反向过程在时间维度上<strong>达到连续</strong>。</p>
-<p>每一次对数据进行噪声的添加，如此一次性的、离散的行为，用随机微分方程来表达可以写作：</p>
-<script type="math/tex; mode=display">
-\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t=\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>其中：</p>
-<ul>
-<li>$\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t$ 表示的是<strong>确定</strong>项；</li>
-<li>$g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}$ 表示的是<strong>随机</strong>项；<br>由于 $\boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})$ ，噪声一直服从一个标准正态分布。与此同时需要保证随机效应在这个过程之中一直存在，因此关于随机项的系数是个 $\sqrt{\Delta t}$ </li>
-</ul>
-<p>为了使其具备连续性，对上式取极限，使得 $\Delta t \rightarrow 0$ ，可得其连续的扩散过程的微分： </p>
-<script type="math/tex; mode=display">
-d \boldsymbol{x}=f_t(\boldsymbol{x}) d t+g_t d \boldsymbol{w}</script><p>在这种情况下，扩散过程不必告知其扩散步数，只需要看关于时间 $t$ 的微分能取多小。</p>
-<h3 id="好处"><a href="#好处" class="headerlink" title="好处"></a>好处</h3><ul>
-<li>在分析这个扩散过程的时候，可以利用连续的随机微分方程对其进行建模分析，使其理论上更可信。</li>
-<li>在代码实现的时候，可以参照第一个式子，选取合适的离散化方案，就可以对其进行数值计算。<br>整体上实现了将理论分析与程序实现分离的功能。</li>
-</ul>
-<h1 id="三、反向降噪过程"><a href="#三、反向降噪过程" class="headerlink" title="三、反向降噪过程"></a>三、反向降噪过程</h1><p>由于没有办法直接写出反向过程的表达式，所以这里倾向于先写出正向的概率公式，再利用贝叶斯公式得到降噪过程的表达式。</p>
-<p>对于一个极短的时间间隔 $\Delta t$ 内的<strong>正向</strong>过程，可以用条件概率公式表达为：</p>
-<script type="math/tex; mode=display">
-\begin{aligned}
-q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) &=\mathcal{N}\left(\boldsymbol{x}_{t+\Delta t} ; \boldsymbol{x}_t+\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t, g_t^2 \Delta t \boldsymbol{I}\right) \propto \exp \left(-\frac{\left\|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right\|^2}{2 g_t^2 \Delta t}\right)
-\end{aligned}</script><p>后面只写相关不写等式是为了略去一些常数项参数的干扰。这里利用贝叶斯定理，反向过程可以被表征为：</p>
-<script type="math/tex; mode=display">
-p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right)=\frac{q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) p\left(\boldsymbol{x}_t\right)}{p\left(\boldsymbol{x}_{t+\Delta t}\right)}</script><script type="math/tex; mode=display">
-=q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) \exp \left(\log p\left(\boldsymbol{x}_t\right)-\log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right)</script><p>带入正向过程得到的相关系数，可以得到反向过程相关于：</p>
-<script type="math/tex; mode=display">
-\propto \exp \left(-\frac{\left\|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right\|^2}{2 g_t^2 \Delta t}+\log p\left(\boldsymbol{x}_t\right)-\log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right)</script><p>此时需要注意到：<br>为了让这个过程连续，$\Delta t$ 需要足够小。而当 $\Delta t$ 足够小时，为了使得概率模型 $p\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right)\neq 0$ ，也即使得其概率明显大于0，成为值得被考量的<a href="https://zh.m.wikipedia.org/zh-hans/%E6%98%BE%E8%91%97%E6%80%A7%E5%B7%AE%E5%BC%82">显著事件</a>。</p>
-<p>为了满足上述情况下的各种需求，只有令 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 足够接近时，$\frac{\left|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right|^2}{2 g_t^2 \Delta t}$ 才会趋于0，从而使得 $\exp \left(-\frac{\left|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right|^2}{2 g_t^2 \Delta t}\right)$ 趋于1，使得该概率模型的值明显不等于0。</p>
-<p>因此针对 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 的关联进行数学描述，此处使用对数函数的一阶泰勒展开：</p>
-<script type="math/tex; mode=display">
-\log p\left(\boldsymbol{x}_{t+\Delta t}\right) \approx \log p\left(\boldsymbol{x}_t\right)+\left(\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t\right) \cdot \nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)+\Delta t \frac{\partial}{\partial t} \log p\left(\boldsymbol{x}_t\right)</script><p>将这个式子作为一个结论，回代到反向过程的数学描述中：</p>
-<script type="math/tex; mode=display">
-p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right) \propto \exp \left(-\frac{\left\|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\left[\boldsymbol{f}_t\left(\boldsymbol{x}_t\right)-g_t^2 \nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)\right] \Delta t\right\|^2}{2 g_t^2 \Delta t}+\mathcal{O}(\Delta t)\right)</script><p>$\text { 当 } \Delta t \rightarrow 0 \text { 时, } \mathcal{O}(\Delta t) \rightarrow 0 \text { 不起作用, 因此： }$</p>
-<script type="math/tex; mode=display">
-\approx \exp \left(-\frac{\left\|\boldsymbol{x}_t-\boldsymbol{x}_{t+\Delta t}+\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t\right\|^2}{2 g_{t+\Delta t}^2 \Delta t}\right)</script><p>此处因为 $\Delta t \rightarrow 0$ ，$f_t(\cdot) \sim f_{t+\Delta t}(\cdot)$，同理 $g^2_t(\cdot) \sim g^2_{t+\Delta t}(\cdot)$ ，其余都是这么近似将下标从 $t$ 替换成 $t+\Delta t$ 。</p>
-<p>将上述表达式凑成一个高斯分布的话，我们就可以得知，反向降噪概率模型 $p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right)$ 可以近似成一个高斯分布，参数为：</p>
-<ul>
-<li>均值： <script type="math/tex; mode=display">
-\boldsymbol{x}_{t+\Delta t}-\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t</script></li>
-<li>协方差： $g_{t+\Delta t}^2 \Delta t \boldsymbol{I}$</li>
-</ul>
-<p>再度取 $\Delta t \rightarrow 0$ ，利用SDE对其建模，可以得到：</p>
-<script type="math/tex; mode=display">
-d \boldsymbol{x}=\left[\boldsymbol{f}_t(\boldsymbol{x})-g_t^2 \nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})\right] d t+g_t d \boldsymbol{w}</script><p>这就是降噪过程的SDE。</p>
-<h2 id="分数匹配（Score-Matching）"><a href="#分数匹配（Score-Matching）" class="headerlink" title="分数匹配（Score Matching）"></a>分数匹配（Score Matching）</h2><h3 id="1）从连续出发，再次的离散化"><a href="#1）从连续出发，再次的离散化" class="headerlink" title="1）从连续出发，再次的离散化"></a>1）从连续出发，再次的离散化</h3><p>既然已经得到了逆向的SDE，<strong>只要再知道 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$（分数（score））</strong> 就可以将SDE再度离散化，实现一步一步离散化的去噪：</p>
-<script type="math/tex; mode=display">
-\boldsymbol{x}_t-\boldsymbol{x}_{t+\Delta t}=-\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t+g_{t+\Delta t}^2 \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>描述的是 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 之间的差距，对比一下正向过程的：</p>
-<script type="math/tex; mode=display">
-\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t=\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>$\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$ 中，$p_t(\boldsymbol{x})$ 等价于前面的 $p\left(\boldsymbol{x}_t\right)$ ，表征扩散到t时刻时的边缘分布。为了得知 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$ ，先需要得知 $p\left(\boldsymbol{x}_t\right)$ 。</p>
-<p>欲知 $p\left(\boldsymbol{x}_t\right)$ 可以构建一个条件概率 $p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ ，使得 $p\left(\boldsymbol{x}_t\right)$ 可以通过 $p\left(\boldsymbol{x}_t\right)=\int p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right) d \boldsymbol{x}_0$ 而被求得。<em>当离散SDE中的 $\boldsymbol{f}_t(\boldsymbol{x})$ 是关于 $x$ 的线性函数的话</em>它就可以被求出解析解：</p>
-<script type="math/tex; mode=display">
-q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=\lim _{\Delta t \rightarrow 0} \int \cdots \iint q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t-\Delta t}\right) q\left(\boldsymbol{x}_{t-\Delta t} \mid \boldsymbol{x}_{t-2 \Delta t}\right) \cdots q\left(\boldsymbol{x}_{\Delta t} \mid \boldsymbol{x}_0\right) d \boldsymbol{x}_{t-\Delta t} \boldsymbol{x}_{t-2 \Delta t} \cdots \boldsymbol{x}_{\Delta t}</script><p>如此就可以写出：</p>
-<script type="math/tex; mode=display">
-p\left(\boldsymbol{x}_t\right)=\int q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right) d \boldsymbol{x}_0=\mathbb{E}_{\boldsymbol{x}_0}\left[q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]</script><p>带入 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$ 中可得：</p>
-<script type="math/tex; mode=display">
-\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)=\frac{\mathbb{E}_{\boldsymbol{x}_0}\left[\nabla_{\boldsymbol{x}_t} p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}=\frac{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}</script><p>这个数学解析角度的<strong>好处：</strong></p>
-<ul>
-<li>因为 $p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ 的解析解可以求得（基于上述线性假设）</li>
-<li>因为其形式形似加权平均</li>
-<li>所以可以进行直接计算<br><strong>缺点：</strong></li>
-<li>计算量太大<br>  需要对全体训练样本计算加权平均</li>
-<li>泛化能力不够<br>  只用到了训练样本</li>
-</ul>
-<p>为了改善这些缺点，也即加快计算速度、提高泛化能力，这里构建一个神经网络（分数网络）$s_\theta\left(x_t, t\right)$ 对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 进行估计。</p>
-<h3 id="2）分数匹配"><a href="#2）分数匹配" class="headerlink" title="2）分数匹配"></a>2）分数匹配</h3><p>需要让 $s_\theta\left(x_t, t\right)$ 对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 的估计越准确越好，我们需要设计一个优化目标。<br>这个优化目标灵感来自对某一个样本数据的<strong>均值</strong>进行估计的目标：</p>
-<script type="math/tex; mode=display">
-\mathbb{E}[\boldsymbol{x}]=\underset{\boldsymbol{\mu}}{\arg \min } \mathbb{E}_{\boldsymbol{x}}\left[\|\boldsymbol{\mu}-\boldsymbol{x}\|^2\right]</script><p>很容易可以知道，在最小化了 $|\boldsymbol{\mu}-\boldsymbol{x}|^2$ 的均值之后，此时的 $\mu$ 就无限接近于 $x$ 的均值。<br>同样的，对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 进行估计，根据上面的描述，等价于对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ 的加权平均的估计，即估计：</p>
-<script type="math/tex; mode=display">
-\frac{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right]}{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}</script><p>分母部分的 $\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]$ 是一个常量不含参，起到的作用是调节loss的权重，为了简化计算将其省略。如此最终的损失函数便是：</p>
-<script type="math/tex; mode=display">
-\begin{aligned}
-& \int \mathbb{E}_{\boldsymbol{x}_0}\left[q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right] d \boldsymbol{x}_t \\
-=& \mathbb{E}_{\boldsymbol{x}_0, \boldsymbol{x}_t \sim q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right)}\left[\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right]
-\end{aligned}</script><h3 id="3）-求解SDE"><a href="#3）-求解SDE" class="headerlink" title="3） 求解SDE"></a>3） 求解SDE</h3><p>求解思路：对正向过程</p>
-<script type="math/tex; mode=display">
-q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_t \boldsymbol{x}_0, \bar{\beta}_t^2 \boldsymbol{I}\right)</script><p>为使得噪音越加越多，得到从 $t=0$ 到 $t=1$ 过程的边界条件为：</p>
-<script type="math/tex; mode=display">
-\bar{\alpha}_0=1, \quad \bar{\alpha}_1=0, \quad \bar{\beta}_0=0, \quad \bar{\beta}_1=1</script><p>再对每一个被离散化的正向过程进行分析，得到每一次离散化的加噪过程可以被概率模型描述为：</p>
-<script type="math/tex; mode=display">
-q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_0\right)=\int q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) d \boldsymbol{x}_t</script><p>其中：</p>
-<ol>
-<li>$q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_0\right)$<ul>
-<li>概率模型表达式： $\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_{t+\Delta t} \boldsymbol{x}_0, \bar{\beta}_{t+\Delta t}^2 \boldsymbol{I}\right)$</li>
-<li>采样方式： $\boldsymbol{x}_{t+\Delta t}=\bar{\alpha}_{t+\Delta t} \boldsymbol{x}_0+\bar{\beta}_{t+\Delta t} \boldsymbol{\varepsilon}$</li>
-</ul>
-</li>
-<li>$q\left(x_t \mid x_0\right)$<ul>
-<li>概率模型表达式： $\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_t \boldsymbol{x}_0, \bar{\beta}_t^2 \boldsymbol{I}\right)$</li>
-<li>采样方式： $\boldsymbol{x}_t=\bar{\alpha}_t \boldsymbol{x}_0+\bar{\beta}_t \boldsymbol{\varepsilon}_1$</li>
-</ul>
-</li>
-<li>$q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right)$<ul>
-<li>概率模型表达式： $\mathcal{N}\left(\boldsymbol{x}_{t+\Delta t} ;\left(1+f_t \Delta t\right) \boldsymbol{x}_t, g_t^2 \Delta t \boldsymbol{I}\right)$</li>
-<li>采样方式： $\boldsymbol{x}_{t+\Delta t}=\left(1+f_t \Delta t\right) \boldsymbol{x}_t+g_t \Delta t \boldsymbol{\varepsilon}_2$</li>
-</ul>
-</li>
-<li>$\int q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) d \boldsymbol{x}_t$<ul>
-<li>采样方式： $\begin{aligned} &amp; \boldsymbol{x}_{t+\Delta t} \\=&amp;\left(1+f_t \Delta t\right) \boldsymbol{x}_t+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}_2 \\=&amp;\left(1+f_t \Delta t\right)\left(\bar{\alpha}_t \boldsymbol{x}_0+\bar{\beta}_t \boldsymbol{\varepsilon}_1\right)+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}_2 \\=&amp;\left(1+f_t \Delta t\right) \bar{\alpha}_t \boldsymbol{x}_0+\left(\left(1+f_t \Delta t\right) \bar{\beta}_t \boldsymbol{\varepsilon}_1+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}_2\right) \end{aligned}$</li>
-</ul>
-</li>
-</ol>
-<p>根据 $d x=f_t x d t+g_t d w$ 求解得到：</p>
-<script type="math/tex; mode=display">
-\begin{aligned}
-&\bar{\alpha}_{t+\Delta t}=\left(1+f_t \Delta t\right) \bar{\alpha}_t \\
-&\bar{\beta}_{t+\Delta t}^2=\left(1+f_t \Delta t\right)^2 \bar{\beta}_t^2+g_t^2 \Delta t
-\end{aligned}</script><p>得知了每一次正向过程噪声添加的<em>噪声系数在微分尺度下的表达</em>，这时候再让 $\Delta t \rightarrow 0$</p>
-<script type="math/tex; mode=display">
-f_t=\frac{d}{d t}\left(\ln \bar{\alpha}_t\right)=\frac{1}{\bar{\alpha}_t} \frac{d \bar{\alpha}_t}{d t}, \quad g^2(t)=\bar{\alpha}_t^2 \frac{d}{d t}\left(\frac{\bar{\beta}_t^2}{\bar{\alpha}_t^2}\right)=2 \bar{\alpha}_t \bar{\beta}_t \frac{d}{d t}\left(\frac{\bar{\beta}_t}{\bar{\alpha}_t}\right)</script><p>又因为：$\bar{\alpha}_t^2+\bar{\beta}_t^2=1$ ，以及 $x_t=\bar{\alpha}_t x_0+\bar{\beta}_t \varepsilon$ ，得到score的表达式：</p>
-<script type="math/tex; mode=display">
-\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=-\frac{\boldsymbol{x}_t-\bar{\alpha}_t \boldsymbol{x}_0}{\bar{\beta}_t^2}=-\frac{\boldsymbol{\varepsilon}}{\bar{\beta}_t}</script><p>由于分数网络是对上式进行的匹配，上式表明score正比于负的噪声，所以分数网络也可以被写作：</p>
-<script type="math/tex; mode=display">
-\boldsymbol{s} \boldsymbol{\theta}\left(\boldsymbol{x}_t, t\right)=-\frac{\boldsymbol{\epsilon} \boldsymbol{\theta}\left(\boldsymbol{x}_t, t\right)}{\bar{\beta}_t}</script><p>最后优化目标在SDE得解之后可以被写作：</p>
-<script type="math/tex; mode=display">
-\frac{1}{\bar{\beta}_t^2} \mathbb{E}_{\boldsymbol{x}_0 \sim \tilde{p}\left(\boldsymbol{x}_0\right), \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})}\left[\left\|\boldsymbol{\epsilon}_{\boldsymbol{\theta}}\left(\bar{\alpha}_t \boldsymbol{x}_0+\bar{\beta}_t \boldsymbol{\varepsilon}, t\right)-\boldsymbol{\varepsilon}\right\|^2\right]</script><h1 id=""><a href="#" class="headerlink" title=" "></a> </h1><h4 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h4><p><a href="https://spaces.ac.cn/archives/9209">生成扩散模型漫谈（五）：一般框架之SDE篇(苏剑林)</a></p>
-]]></content>
-      <categories>
-        <category>AI Model</category>
-      </categories>
-      <tags>
-        <tag>Diffusion</tag>
-        <tag>Generative Model</tag>
-        <tag>Stochastic Differential Equation</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model)</title>
     <url>/2022/10/17/Multiscale%20complexity%20fluctuation%20behaviours%20of%20stochastic%20interacting%20cryptocurrency%20price%20model/</url>
     <content><![CDATA[<p>【随机接触模型】建模的【加密货币价格模型】中的【多尺度】【复杂】【波动】【行为】<br>作者：Zhiyong Zheng, Yunfan Lu, Junhuan Zhang<br>文章：<a href="https://www-sciencedirect-com.libezproxy.must.edu.mo/science/article/pii/S0378437122000528?casa_token=hmttd1BwfH8AAAAA:8jXXld71BYJ0PYHU3TWzRUvWyrfi2VqYoW3XZozBNv8LUP6A_HvHvXPEQraq-3BJODue88bD0Bfe">Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model</a></p>
@@ -314,48 +184,133 @@ E_{i+}+d_{i+}, & \text { if } m_1+m_1^{\prime}=0
       </tags>
   </entry>
   <entry>
-    <title>TS2Vec：一种更普适的时序数据表征方式</title>
-    <url>/2023/01/02/TS2Vec%20Towards%20Universal%20Representation%20of%20Time%20Series/</url>
-    <content><![CDATA[<p>作者：Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu<br>原文：<a href="https://arxiv.org/abs/2106.10466">戳我</a><br>代码：<a href="https://github.com/yuezhihan/ts2vec">戳戳我</a></p>
-<h1 id="一、核心看点"><a href="#一、核心看点" class="headerlink" title="一、核心看点"></a>一、核心看点</h1><ul>
-<li>利用一种<strong>多层对比学习</strong>的方法，为时序数据中每一个时间点提供一个更为好用的上下文表征方法。</li>
-<li>通过在时间点上执行一个简洁的数据聚合方法，使得在时序数据中的<strong>任意一个子序列</strong>都可以被表征。</li>
+    <title>基于分数(score-based)的扩散(Diffusion)模型</title>
+    <url>/2022/10/17/Score-based%20Diffusion%20Model/</url>
+    <content><![CDATA[<p>基于分数的的扩散模型，<br>原文章：<a href="https://arxiv.org/abs/2011.13456">Score-Based Generative Modeling through Stochastic Differential Equations</a></p>
+<h1 id="一、直观理解"><a href="#一、直观理解" class="headerlink" title="一、直观理解"></a>一、直观理解</h1><p>将反向降噪过程中的降噪建模成一个<strong>粒子随机运动过程</strong>，然后用langevin方程描述这个粒子随机运动，并求出一个稳定解，得出降噪过程噪点运动的物理规律，从而引导噪声的分布向原数据分布的特征进行运动，从而达到生成数据的目的。<br><img src="/images/score_based_diff/Pasted image 20221128202716.png" alt="Overview of the Score-based Diffusion Model"></p>
+<h1 id="二、正向扩散过程"><a href="#二、正向扩散过程" class="headerlink" title="二、正向扩散过程"></a>二、正向扩散过程</h1><h2 id="随机微分方程建模（从离散到连续）"><a href="#随机微分方程建模（从离散到连续）" class="headerlink" title="随机微分方程建模（从离散到连续）"></a>随机微分方程建模（从离散到连续）</h2><p>思路依然是基于DDPM的分解方法，将噪音添加的过程分为 $T$ 步。只是DDPM中这个步数 $T$ 是人为设计的、<strong>离散的</strong>，按照直观的理解，这个噪音添加包括降噪的过程应该是连续的，为了消除这个人为的影响。</p>
+<p>这里就用一个随机微分方程（SDE）进行建模，使得diffusion的正向、反向过程在时间维度上<strong>达到连续</strong>。</p>
+<p>每一次对数据进行噪声的添加，如此一次性的、离散的行为，用随机微分方程来表达可以写作：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t=\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>其中：</p>
+<ul>
+<li>$\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t$ 表示的是<strong>确定</strong>项；</li>
+<li>$g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}$ 表示的是<strong>随机</strong>项；<br>由于 $\boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})$ ，噪声一直服从一个标准正态分布。与此同时需要保证随机效应在这个过程之中一直存在，因此关于随机项的系数是个 $\sqrt{\Delta t}$ </li>
 </ul>
-<h1 id="二、研究动机"><a href="#二、研究动机" class="headerlink" title="二、研究动机"></a>二、研究动机</h1><ul>
-<li>实例层级（Instance-level）的表征方法可能没有办法很好注入时序预测、异常检测之类的适配细粒度（fine-grained）的任务。</li>
-<li>针对现有各种的表征方法中，在表征某一个时间点的上下文(contextual)信息时，上下文的覆盖范围不够灵活，窗口大小相对固定。<ul>
-<li>多尺度的表征方法可以提高其泛化性，使其对更多的下游任务都能适配。</li>
+<p>为了使其具备连续性，对上式取极限，使得 $\Delta t \rightarrow 0$ ，可得其连续的扩散过程的微分： </p>
+<script type="math/tex; mode=display">
+d \boldsymbol{x}=f_t(\boldsymbol{x}) d t+g_t d \boldsymbol{w}</script><p>在这种情况下，扩散过程不必告知其扩散步数，只需要看关于时间 $t$ 的微分能取多小。</p>
+<h3 id="好处"><a href="#好处" class="headerlink" title="好处"></a>好处</h3><ul>
+<li>在分析这个扩散过程的时候，可以利用连续的随机微分方程对其进行建模分析，使其理论上更可信。</li>
+<li>在代码实现的时候，可以参照第一个式子，选取合适的离散化方案，就可以对其进行数值计算。<br>整体上实现了将理论分析与程序实现分离的功能。</li>
 </ul>
-</li>
-<li>目前针对时序数据的无监督式表征学习方法，大部分都是从cv或者nlp领域照搬过来的。</li>
+<h1 id="三、反向降噪过程"><a href="#三、反向降噪过程" class="headerlink" title="三、反向降噪过程"></a>三、反向降噪过程</h1><p>由于没有办法直接写出反向过程的表达式，所以这里倾向于先写出正向的概率公式，再利用贝叶斯公式得到降噪过程的表达式。</p>
+<p>对于一个极短的时间间隔 $\Delta t$ 内的<strong>正向</strong>过程，可以用条件概率公式表达为：</p>
+<script type="math/tex; mode=display">
+\begin{aligned}
+q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) &=\mathcal{N}\left(\boldsymbol{x}_{t+\Delta t} ; \boldsymbol{x}_t+\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t, g_t^2 \Delta t \boldsymbol{I}\right) \propto \exp \left(-\frac{\left\|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right\|^2}{2 g_t^2 \Delta t}\right)
+\end{aligned}</script><p>后面只写相关不写等式是为了略去一些常数项参数的干扰。这里利用贝叶斯定理，反向过程可以被表征为：</p>
+<script type="math/tex; mode=display">
+p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right)=\frac{q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) p\left(\boldsymbol{x}_t\right)}{p\left(\boldsymbol{x}_{t+\Delta t}\right)}</script><script type="math/tex; mode=display">
+=q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) \exp \left(\log p\left(\boldsymbol{x}_t\right)-\log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right)</script><p>带入正向过程得到的相关系数，可以得到反向过程相关于：</p>
+<script type="math/tex; mode=display">
+\propto \exp \left(-\frac{\left\|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right\|^2}{2 g_t^2 \Delta t}+\log p\left(\boldsymbol{x}_t\right)-\log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right)</script><p>此时需要注意到：<br>为了让这个过程连续，$\Delta t$ 需要足够小。而当 $\Delta t$ 足够小时，为了使得概率模型 $p\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right)\neq 0$ ，也即使得其概率明显大于0，成为值得被考量的<a href="https://zh.m.wikipedia.org/zh-hans/%E6%98%BE%E8%91%97%E6%80%A7%E5%B7%AE%E5%BC%82">显著事件</a>。</p>
+<p>为了满足上述情况下的各种需求，只有令 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 足够接近时，$\frac{\left|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right|^2}{2 g_t^2 \Delta t}$ 才会趋于0，从而使得 $\exp \left(-\frac{\left|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right|^2}{2 g_t^2 \Delta t}\right)$ 趋于1，使得该概率模型的值明显不等于0。</p>
+<p>因此针对 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 的关联进行数学描述，此处使用对数函数的一阶泰勒展开：</p>
+<script type="math/tex; mode=display">
+\log p\left(\boldsymbol{x}_{t+\Delta t}\right) \approx \log p\left(\boldsymbol{x}_t\right)+\left(\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t\right) \cdot \nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)+\Delta t \frac{\partial}{\partial t} \log p\left(\boldsymbol{x}_t\right)</script><p>将这个式子作为一个结论，回代到反向过程的数学描述中：</p>
+<script type="math/tex; mode=display">
+p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right) \propto \exp \left(-\frac{\left\|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\left[\boldsymbol{f}_t\left(\boldsymbol{x}_t\right)-g_t^2 \nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)\right] \Delta t\right\|^2}{2 g_t^2 \Delta t}+\mathcal{O}(\Delta t)\right)</script><p>$\text { 当 } \Delta t \rightarrow 0 \text { 时, } \mathcal{O}(\Delta t) \rightarrow 0 \text { 不起作用, 因此： }$</p>
+<script type="math/tex; mode=display">
+\approx \exp \left(-\frac{\left\|\boldsymbol{x}_t-\boldsymbol{x}_{t+\Delta t}+\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t\right\|^2}{2 g_{t+\Delta t}^2 \Delta t}\right)</script><p>此处因为 $\Delta t \rightarrow 0$ ，$f_t(\cdot) \sim f_{t+\Delta t}(\cdot)$，同理 $g^2_t(\cdot) \sim g^2_{t+\Delta t}(\cdot)$ ，其余都是这么近似将下标从 $t$ 替换成 $t+\Delta t$ 。</p>
+<p>将上述表达式凑成一个高斯分布的话，我们就可以得知，反向降噪概率模型 $p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right)$ 可以近似成一个高斯分布，参数为：</p>
+<ul>
+<li>均值： <script type="math/tex; mode=display">
+\boldsymbol{x}_{t+\Delta t}-\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t</script></li>
+<li>协方差： $g_{t+\Delta t}^2 \Delta t \boldsymbol{I}$</li>
 </ul>
-<h1 id="三、问题建模"><a href="#三、问题建模" class="headerlink" title="三、问题建模"></a>三、问题建模</h1><p>对包含 $N$ 个实例的时序数据 $\mathcal{X}=\left\{x_1, x_2, \cdots, x_N\right\}, x_i \in \mathbb{R}^{T \times F}$ ( $T$ 表示的是序列长度， $F$ 表示的是特征维度)，构建一个非线性的嵌入(embedding)映射，将每一个 $x_i$ 映射成对应的表征量 $r_i$ 。<br>针对第i个实例 $x_i$ ，经过嵌入映射后得到的其表征向量写作$r_i=\left\{r_{i, 1}, r_{i, 2}, \cdots, r_{i, T}\right\}, r_{i, t} \in \mathbb{R}^K$，此处 $K$ 表示的是用户自定义的嵌入维度。</p>
-<h1 id="四、模型概览"><a href="#四、模型概览" class="headerlink" title="四、模型概览"></a>四、模型概览</h1><p><img src="/images/ts2vec/Pasted image 20230104155411.png" alt=""></p>
+<p>再度取 $\Delta t \rightarrow 0$ ，利用SDE对其建模，可以得到：</p>
+<script type="math/tex; mode=display">
+d \boldsymbol{x}=\left[\boldsymbol{f}_t(\boldsymbol{x})-g_t^2 \nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})\right] d t+g_t d \boldsymbol{w}</script><p>这就是降噪过程的SDE。</p>
+<h2 id="分数匹配（Score-Matching）"><a href="#分数匹配（Score-Matching）" class="headerlink" title="分数匹配（Score Matching）"></a>分数匹配（Score Matching）</h2><h3 id="1）从连续出发，再次的离散化"><a href="#1）从连续出发，再次的离散化" class="headerlink" title="1）从连续出发，再次的离散化"></a>1）从连续出发，再次的离散化</h3><p>既然已经得到了逆向的SDE，<strong>只要再知道 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$（分数（score））</strong> 就可以将SDE再度离散化，实现一步一步离散化的去噪：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{x}_t-\boldsymbol{x}_{t+\Delta t}=-\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t+g_{t+\Delta t}^2 \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>描述的是 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 之间的差距，对比一下正向过程的：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t=\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>$\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$ 中，$p_t(\boldsymbol{x})$ 等价于前面的 $p\left(\boldsymbol{x}_t\right)$ ，表征扩散到t时刻时的边缘分布。为了得知 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$ ，先需要得知 $p\left(\boldsymbol{x}_t\right)$ 。</p>
+<p>欲知 $p\left(\boldsymbol{x}_t\right)$ 可以构建一个条件概率 $p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ ，使得 $p\left(\boldsymbol{x}_t\right)$ 可以通过 $p\left(\boldsymbol{x}_t\right)=\int p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right) d \boldsymbol{x}_0$ 而被求得。<em>当离散SDE中的 $\boldsymbol{f}_t(\boldsymbol{x})$ 是关于 $x$ 的线性函数的话</em>它就可以被求出解析解：</p>
+<script type="math/tex; mode=display">
+q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=\lim _{\Delta t \rightarrow 0} \int \cdots \iint q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t-\Delta t}\right) q\left(\boldsymbol{x}_{t-\Delta t} \mid \boldsymbol{x}_{t-2 \Delta t}\right) \cdots q\left(\boldsymbol{x}_{\Delta t} \mid \boldsymbol{x}_0\right) d \boldsymbol{x}_{t-\Delta t} \boldsymbol{x}_{t-2 \Delta t} \cdots \boldsymbol{x}_{\Delta t}</script><p>如此就可以写出：</p>
+<script type="math/tex; mode=display">
+p\left(\boldsymbol{x}_t\right)=\int q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right) d \boldsymbol{x}_0=\mathbb{E}_{\boldsymbol{x}_0}\left[q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]</script><p>带入 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$ 中可得：</p>
+<script type="math/tex; mode=display">
+\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)=\frac{\mathbb{E}_{\boldsymbol{x}_0}\left[\nabla_{\boldsymbol{x}_t} p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}=\frac{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}</script><p>这个数学解析角度的<strong>好处：</strong></p>
+<ul>
+<li>因为 $p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ 的解析解可以求得（基于上述线性假设）</li>
+<li>因为其形式形似加权平均</li>
+<li>所以可以进行直接计算<br><strong>缺点：</strong></li>
+<li>计算量太大<br>  需要对全体训练样本计算加权平均</li>
+<li>泛化能力不够<br>  只用到了训练样本</li>
+</ul>
+<p>为了改善这些缺点，也即加快计算速度、提高泛化能力，这里构建一个神经网络（分数网络）$s_\theta\left(x_t, t\right)$ 对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 进行估计。</p>
+<h3 id="2）分数匹配"><a href="#2）分数匹配" class="headerlink" title="2）分数匹配"></a>2）分数匹配</h3><p>需要让 $s_\theta\left(x_t, t\right)$ 对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 的估计越准确越好，我们需要设计一个优化目标。<br>这个优化目标灵感来自对某一个样本数据的<strong>均值</strong>进行估计的目标：</p>
+<script type="math/tex; mode=display">
+\mathbb{E}[\boldsymbol{x}]=\underset{\boldsymbol{\mu}}{\arg \min } \mathbb{E}_{\boldsymbol{x}}\left[\|\boldsymbol{\mu}-\boldsymbol{x}\|^2\right]</script><p>很容易可以知道，在最小化了 $|\boldsymbol{\mu}-\boldsymbol{x}|^2$ 的均值之后，此时的 $\mu$ 就无限接近于 $x$ 的均值。<br>同样的，对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 进行估计，根据上面的描述，等价于对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ 的加权平均的估计，即估计：</p>
+<script type="math/tex; mode=display">
+\frac{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right]}{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}</script><p>分母部分的 $\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]$ 是一个常量不含参，起到的作用是调节loss的权重，为了简化计算将其省略。如此最终的损失函数便是：</p>
+<script type="math/tex; mode=display">
+\begin{aligned}
+& \int \mathbb{E}_{\boldsymbol{x}_0}\left[q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right] d \boldsymbol{x}_t \\
+=& \mathbb{E}_{\boldsymbol{x}_0, \boldsymbol{x}_t \sim q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right)}\left[\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right]
+\end{aligned}</script><h3 id="3）-求解SDE"><a href="#3）-求解SDE" class="headerlink" title="3） 求解SDE"></a>3） 求解SDE</h3><p>求解思路：对正向过程</p>
+<script type="math/tex; mode=display">
+q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_t \boldsymbol{x}_0, \bar{\beta}_t^2 \boldsymbol{I}\right)</script><p>为使得噪音越加越多，得到从 $t=0$ 到 $t=1$ 过程的边界条件为：</p>
+<script type="math/tex; mode=display">
+\bar{\alpha}_0=1, \quad \bar{\alpha}_1=0, \quad \bar{\beta}_0=0, \quad \bar{\beta}_1=1</script><p>再对每一个被离散化的正向过程进行分析，得到每一次离散化的加噪过程可以被概率模型描述为：</p>
+<script type="math/tex; mode=display">
+q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_0\right)=\int q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) d \boldsymbol{x}_t</script><p>其中：</p>
 <ol>
-<li>针对第 $i$ 个实例 $x_i$， 从里面随机选取<strong>一对</strong>在时间维度上相交的子序列（ $a_1$ , $b_1$）和 ( $a_2$, $b_2$ )<br> 两序列在( $a_2$ , $b_1$ )段重合<br> $0&lt;a_1 \leq a_2 \leq b_1 \leq b_2 \leq T$<br> 两个子序列相交的原因：方便检验该方法在两个子序列上，其相交部分的上下文表征具备一致性。</li>
-<li>这两段子序列都会被输入一个编码器（<em>encoder</em>）。<br> 该编码器利用 <strong>contrastive loss</strong> 和 <strong>instance-wise contrastive loss</strong> 进行共同训练。<br> 编码器分为三层：<ol>
-<li>输入映射层( <em>Input Projection Layer</em>)<br> 将 $x_{i, t}$ 映射为隐变量 $z_{i, t}$ ，后者的维度将高于前者<br> 模型：全连接层</li>
-<li>时间点掩码层( <em>Timestamp Masking</em> )<br> 对隐变量$z_{i, t}$ ，随机选取时间点进行遮掩。下图打问号的部分就是被掩码遮蔽的区域。<br> 对于一对子序列，这段操作就是在它们的相交部分，选择一段时间的数据进行单向、双向的遮蔽，并检查这两段子序列的嵌入向量，在这个遮掩区域的表征是否一致。<br> 数学表达： $m \in\{0,1\}^T$<br> 选取方法：在 $p=0.5$ 的伯努利分布上采样<br> <img src="/images/ts2vec/Pasted image 20230104170806.png" alt=""></li>
-<li>扩张卷积层 ( <em>Dilated Convolution</em> )<br> 对每个时间点抽取其上下文特征<br> 模型：10个res blocks，每一个res block包含两个1D卷积层</li>
-</ol>
+<li>$q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_0\right)$<ul>
+<li>概率模型表达式： $\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_{t+\Delta t} \boldsymbol{x}_0, \bar{\beta}_{t+\Delta t}^2 \boldsymbol{I}\right)$</li>
+<li>采样方式： $\boldsymbol{x}_{t+\Delta t}=\bar{\alpha}_{t+\Delta t} \boldsymbol{x}_0+\bar{\beta}_{t+\Delta t} \boldsymbol{\varepsilon}$</li>
+</ul>
 </li>
-<li><p>进行多层级的对比( <em>Hierarchical Contrasting</em> )<br> 对于同一个实例 $x_i$， 在时间点 $t$ 上，选取用于表征它的、数值不同的两个嵌入向量 $r_{i, t}$ 与 $r^\prime_{i, t}$ 。<br> 计算其<strong>时间维度</strong>上的表征差异：</p>
-<script type="math/tex; mode=display">
-\ell_{t e m p}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{t^{\prime} \in \Omega}\left(\exp \left(r_{i, t} \cdot r_{i, t^{\prime}}^{\prime}\right)+\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)\right)}</script><p> 其中：$\Omega$ 表征的是这对子序列相交的那一部分数据对应的时间段。<br> $\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)$ 表示当 $t \neq t^{\prime}$ 时，才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 再计算<strong>整体</strong>上二者的表征差异：</p>
-<script type="math/tex; mode=display">
-\ell_{i n s t}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{j=1}^B\left(\exp \left(r_{i, t} \cdot r_{j, t}^{\prime}\right)+\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)\right)}</script><p> 其中： $B$ 表征的是一个训练批次的大小（batch size）。<br> $\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)$ 表示当 $i \neq j$ 的时候才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 将这两者聚合：</p>
-<script type="math/tex; mode=display">
-\mathcal{L}_{d u a l}(r_{i, t} , r^\prime_{i, t})=\frac{1}{N T} \sum_i \sum_t\left(\ell_{t e m p}^{(i, t)}+\ell_{i n s t}^{(i, t)}\right)</script><p> 再利用maxpooling技术，不断压缩这对子序列数据，再在压缩了的数据上执行对比计算，直到子序列的长度被压缩为1.<br><img src="/images/ts2vec/Pasted image 20230104220210.png" alt=""></p>
+<li>$q\left(x_t \mid x_0\right)$<ul>
+<li>概率模型表达式： $\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_t \boldsymbol{x}_0, \bar{\beta}_t^2 \boldsymbol{I}\right)$</li>
+<li>采样方式： $\boldsymbol{x}_t=\bar{\alpha}_t \boldsymbol{x}_0+\bar{\beta}_t \boldsymbol{\varepsilon}_1$</li>
+</ul>
+</li>
+<li>$q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right)$<ul>
+<li>概率模型表达式： $\mathcal{N}\left(\boldsymbol{x}_{t+\Delta t} ;\left(1+f_t \Delta t\right) \boldsymbol{x}_t, g_t^2 \Delta t \boldsymbol{I}\right)$</li>
+<li>采样方式： $\boldsymbol{x}_{t+\Delta t}=\left(1+f_t \Delta t\right) \boldsymbol{x}_t+g_t \Delta t \boldsymbol{\varepsilon}_2$</li>
+</ul>
+</li>
+<li>$\int q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) d \boldsymbol{x}_t$<ul>
+<li>采样方式： $\begin{aligned} &amp; \boldsymbol{x}_{t+\Delta t} \\=&amp;\left(1+f_t \Delta t\right) \boldsymbol{x}_t+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}_2 \\=&amp;\left(1+f_t \Delta t\right)\left(\bar{\alpha}_t \boldsymbol{x}_0+\bar{\beta}_t \boldsymbol{\varepsilon}_1\right)+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}_2 \\=&amp;\left(1+f_t \Delta t\right) \bar{\alpha}_t \boldsymbol{x}_0+\left(\left(1+f_t \Delta t\right) \bar{\beta}_t \boldsymbol{\varepsilon}_1+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}_2\right) \end{aligned}$</li>
+</ul>
 </li>
 </ol>
+<p>根据 $d x=f_t x d t+g_t d w$ 求解得到：</p>
+<script type="math/tex; mode=display">
+\begin{aligned}
+&\bar{\alpha}_{t+\Delta t}=\left(1+f_t \Delta t\right) \bar{\alpha}_t \\
+&\bar{\beta}_{t+\Delta t}^2=\left(1+f_t \Delta t\right)^2 \bar{\beta}_t^2+g_t^2 \Delta t
+\end{aligned}</script><p>得知了每一次正向过程噪声添加的<em>噪声系数在微分尺度下的表达</em>，这时候再让 $\Delta t \rightarrow 0$</p>
+<script type="math/tex; mode=display">
+f_t=\frac{d}{d t}\left(\ln \bar{\alpha}_t\right)=\frac{1}{\bar{\alpha}_t} \frac{d \bar{\alpha}_t}{d t}, \quad g^2(t)=\bar{\alpha}_t^2 \frac{d}{d t}\left(\frac{\bar{\beta}_t^2}{\bar{\alpha}_t^2}\right)=2 \bar{\alpha}_t \bar{\beta}_t \frac{d}{d t}\left(\frac{\bar{\beta}_t}{\bar{\alpha}_t}\right)</script><p>又因为：$\bar{\alpha}_t^2+\bar{\beta}_t^2=1$ ，以及 $x_t=\bar{\alpha}_t x_0+\bar{\beta}_t \varepsilon$ ，得到score的表达式：</p>
+<script type="math/tex; mode=display">
+\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=-\frac{\boldsymbol{x}_t-\bar{\alpha}_t \boldsymbol{x}_0}{\bar{\beta}_t^2}=-\frac{\boldsymbol{\varepsilon}}{\bar{\beta}_t}</script><p>由于分数网络是对上式进行的匹配，上式表明score正比于负的噪声，所以分数网络也可以被写作：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{s} \boldsymbol{\theta}\left(\boldsymbol{x}_t, t\right)=-\frac{\boldsymbol{\epsilon} \boldsymbol{\theta}\left(\boldsymbol{x}_t, t\right)}{\bar{\beta}_t}</script><p>最后优化目标在SDE得解之后可以被写作：</p>
+<script type="math/tex; mode=display">
+\frac{1}{\bar{\beta}_t^2} \mathbb{E}_{\boldsymbol{x}_0 \sim \tilde{p}\left(\boldsymbol{x}_0\right), \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})}\left[\left\|\boldsymbol{\epsilon}_{\boldsymbol{\theta}}\left(\bar{\alpha}_t \boldsymbol{x}_0+\bar{\beta}_t \boldsymbol{\varepsilon}, t\right)-\boldsymbol{\varepsilon}\right\|^2\right]</script><h1 id=""><a href="#" class="headerlink" title=" "></a> </h1><h4 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h4><p><a href="https://spaces.ac.cn/archives/9209">生成扩散模型漫谈（五）：一般框架之SDE篇(苏剑林)</a></p>
 ]]></content>
       <categories>
-        <category>Paper</category>
+        <category>AI Model</category>
       </categories>
       <tags>
-        <tag>CNN</tag>
-        <tag>Representation Learning</tag>
-        <tag>Time Series</tag>
+        <tag>Diffusion</tag>
+        <tag>Generative Model</tag>
+        <tag>Stochastic Differential Equation</tag>
       </tags>
   </entry>
   <entry>
@@ -406,6 +361,51 @@ E_{i+}+d_{i+}, & \text { if } m_1+m_1^{\prime}=0
       <tags>
         <tag>Diffusion</tag>
         <tag>Generative Model</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>TS2Vec：一种更普适的时序数据表征方式</title>
+    <url>/2023/01/02/TS2Vec%20Towards%20Universal%20Representation%20of%20Time%20Series/</url>
+    <content><![CDATA[<p>作者：Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu<br>原文：<a href="https://arxiv.org/abs/2106.10466">戳我</a><br>代码：<a href="https://github.com/yuezhihan/ts2vec">戳戳我</a></p>
+<h1 id="一、核心看点"><a href="#一、核心看点" class="headerlink" title="一、核心看点"></a>一、核心看点</h1><ul>
+<li>利用一种<strong>多层对比学习</strong>的方法，为时序数据中每一个时间点提供一个更为好用的上下文表征方法。</li>
+<li>通过在时间点上执行一个简洁的数据聚合方法，使得在时序数据中的<strong>任意一个子序列</strong>都可以被表征。</li>
+</ul>
+<h1 id="二、研究动机"><a href="#二、研究动机" class="headerlink" title="二、研究动机"></a>二、研究动机</h1><ul>
+<li>实例层级（Instance-level）的表征方法可能没有办法很好注入时序预测、异常检测之类的适配细粒度（fine-grained）的任务。</li>
+<li>针对现有各种的表征方法中，在表征某一个时间点的上下文(contextual)信息时，上下文的覆盖范围不够灵活，窗口大小相对固定。<ul>
+<li>多尺度的表征方法可以提高其泛化性，使其对更多的下游任务都能适配。</li>
+</ul>
+</li>
+<li>目前针对时序数据的无监督式表征学习方法，大部分都是从cv或者nlp领域照搬过来的。</li>
+</ul>
+<h1 id="三、问题建模"><a href="#三、问题建模" class="headerlink" title="三、问题建模"></a>三、问题建模</h1><p>对包含 $N$ 个实例的时序数据 $\mathcal{X}=\left\{x_1, x_2, \cdots, x_N\right\}, x_i \in \mathbb{R}^{T \times F}$ ( $T$ 表示的是序列长度， $F$ 表示的是特征维度)，构建一个非线性的嵌入(embedding)映射，将每一个 $x_i$ 映射成对应的表征量 $r_i$ 。<br>针对第i个实例 $x_i$ ，经过嵌入映射后得到的其表征向量写作$r_i=\left\{r_{i, 1}, r_{i, 2}, \cdots, r_{i, T}\right\}, r_{i, t} \in \mathbb{R}^K$，此处 $K$ 表示的是用户自定义的嵌入维度。</p>
+<h1 id="四、模型概览"><a href="#四、模型概览" class="headerlink" title="四、模型概览"></a>四、模型概览</h1><p><img src="/images/ts2vec/Pasted image 20230104155411.png" alt=""></p>
+<ol>
+<li>针对第 $i$ 个实例 $x_i$， 从里面随机选取<strong>一对</strong>在时间维度上相交的子序列（ $a_1$ , $b_1$）和 ( $a_2$, $b_2$ )<br> 两序列在( $a_2$ , $b_1$ )段重合<br> $0&lt;a_1 \leq a_2 \leq b_1 \leq b_2 \leq T$<br> 两个子序列相交的原因：方便检验该方法在两个子序列上，其相交部分的上下文表征具备一致性。</li>
+<li>这两段子序列都会被输入一个编码器（<em>encoder</em>）。<br> 该编码器利用 <strong>contrastive loss</strong> 和 <strong>instance-wise contrastive loss</strong> 进行共同训练。<br> 编码器分为三层：<ol>
+<li>输入映射层( <em>Input Projection Layer</em>)<br> 将 $x_{i, t}$ 映射为隐变量 $z_{i, t}$ ，后者的维度将高于前者<br> 模型：全连接层</li>
+<li>时间点掩码层( <em>Timestamp Masking</em> )<br> 对隐变量$z_{i, t}$ ，随机选取时间点进行遮掩。下图打问号的部分就是被掩码遮蔽的区域。<br> 对于一对子序列，这段操作就是在它们的相交部分，选择一段时间的数据进行单向、双向的遮蔽，并检查这两段子序列的嵌入向量，在这个遮掩区域的表征是否一致。<br> 数学表达： $m \in\{0,1\}^T$<br> 选取方法：在 $p=0.5$ 的伯努利分布上采样<br> <img src="/images/ts2vec/Pasted image 20230104170806.png" alt=""></li>
+<li>扩张卷积层 ( <em>Dilated Convolution</em> )<br> 对每个时间点抽取其上下文特征<br> 模型：10个res blocks，每一个res block包含两个1D卷积层</li>
+</ol>
+</li>
+<li><p>进行多层级的对比( <em>Hierarchical Contrasting</em> )<br> 对于同一个实例 $x_i$， 在时间点 $t$ 上，选取用于表征它的、数值不同的两个嵌入向量 $r_{i, t}$ 与 $r^\prime_{i, t}$ 。<br> 计算其<strong>时间维度</strong>上的表征差异：</p>
+<script type="math/tex; mode=display">
+\ell_{t e m p}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{t^{\prime} \in \Omega}\left(\exp \left(r_{i, t} \cdot r_{i, t^{\prime}}^{\prime}\right)+\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)\right)}</script><p> 其中：$\Omega$ 表征的是这对子序列相交的那一部分数据对应的时间段。<br> $\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)$ 表示当 $t \neq t^{\prime}$ 时，才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 再计算<strong>整体</strong>上二者的表征差异：</p>
+<script type="math/tex; mode=display">
+\ell_{i n s t}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{j=1}^B\left(\exp \left(r_{i, t} \cdot r_{j, t}^{\prime}\right)+\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)\right)}</script><p> 其中： $B$ 表征的是一个训练批次的大小（batch size）。<br> $\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)$ 表示当 $i \neq j$ 的时候才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 将这两者聚合：</p>
+<script type="math/tex; mode=display">
+\mathcal{L}_{d u a l}(r_{i, t} , r^\prime_{i, t})=\frac{1}{N T} \sum_i \sum_t\left(\ell_{t e m p}^{(i, t)}+\ell_{i n s t}^{(i, t)}\right)</script><p> 再利用maxpooling技术，不断压缩这对子序列数据，再在压缩了的数据上执行对比计算，直到子序列的长度被压缩为1.<br><img src="/images/ts2vec/Pasted image 20230104220210.png" alt=""></p>
+</li>
+</ol>
+]]></content>
+      <categories>
+        <category>Paper</category>
+      </categories>
+      <tags>
+        <tag>CNN</tag>
+        <tag>Representation Learning</tag>
+        <tag>Time Series</tag>
       </tags>
   </entry>
 </search>
