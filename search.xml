@@ -1,0 +1,411 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>Improved DDPM</title>
+    <url>/2022/11/27/Improved%20Denoising%20Diffusion%20Probabilistic%20Models/</url>
+    <content><![CDATA[<p>对DDPM进行改进<br>原文：<a href="http://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf">戳我</a><br>作者：Alex Nichol, Prafulla Dhariwal</p>
+<h1 id="Improvement"><a href="#Improvement" class="headerlink" title="Improvement"></a>Improvement</h1><h2 id="1-对数似然估计"><a href="#1-对数似然估计" class="headerlink" title="1- 对数似然估计"></a>1- 对数似然估计</h2><p>“Razavi, A., van den Oord, A., and Vinyals, O. Generating diverse high-fidelity images with vq-vae-2, 2019.” —— 对对数似然进行估计的优化过程，可以迫使生成模型获取原始数据所有的特征分布。</p>
+<p>“Henighan, T., Kaplan, J., Katz, M., Chen, M., Hesse, C., Jackson, J., Jun, H., Brown, T. B., Dhariwal, P., Gray, S., Hallacy, C., Mann, B., Radford, A., Ramesh, A., Ryder,N., Ziegler, D. M., Schulman, J., Amodei, D., and McCandlish, S. Scaling laws for autoregressive generative modeling, 2020.” —— 在对对数似然上进行微小的提升就可以大幅度提高采样的质量。</p>
+<p>因此：很有必要思考怎样让DDPM在对对数似然的优化更进一步。<br>前期的实验结果发现，把扩散步数$T$增加可以有效提高对数似然的效果。<br>    $T$从1000提高到4000，对数似然提高到3.77</p>
+<h3 id="1-1-对协方差进行预测"><a href="#1-1-对协方差进行预测" class="headerlink" title="1.1- 对协方差进行预测"></a>1.1- 对协方差进行预测</h3><p>DDPM降噪采样时的方差是固定的，固定为：$\Sigma_\theta\left(x_t, t\right)=\sigma_t^2 I$，并且固定$\sigma_t = \beta_t$<br><img src="/images/iddpm/Pasted image 20221127124438.png" alt=""><br>但是很奇怪的是，在降噪的采样实验中，不论是让$\sigma_t = \beta_t$还是让$\sigma_t = \tilde{\beta}_t$，采样的质量差不多。难道是方差其实根本不是决定采样质量的变量？<br>    补充：$\tilde{\beta}_t:=\frac{1-\bar{\alpha}_{t-1}}{1-\bar{\alpha}_t} \beta_t$，$\bar{\alpha}_t:=\prod_{s=0}^t \alpha_s$，$\alpha_t:=1-\beta_t$<br>为了验证这个猜想作者绘制了上图，并发现在扩散进度$t=0$的位置，$\beta_t$和$\tilde{\beta}_t$几乎一致。这说明在有限的扩散步数之内，方差$\sigma_t$不一定和采样质量之间存在关联。</p>
+<p>换句话说就是，我们在添加更多的扩散步数之后，<em>采样质量的高低更多的还是与降噪采样的均值相关</em>。</p>
+<p>同时该图也表明<strong>协方差的合理范围（$\beta$ ~ $\tilde{\beta}$ ）是很小的</strong>，如果利用神经网络直接对其进行预测的话，需要这个神经网络达到相当高程度的精度，这对现有的神经网络来说还是不太好实现的。</p>
+<p>所以说可以转换一个思路，让神经网络去预测一个参数，让参数规划出来的数值落在$\beta$ ~ $\tilde{\beta}$ 之间，这样神经网络就可以更好训练了。</p>
+<script type="math/tex; mode=display">
+\Sigma_\theta\left(x_t, t\right)=\exp \left(v \log \beta_t+(1-v) \log \tilde{\beta}_t\right)</script><p>并且在对$v$进行预测的过程中，作者并没有为其增加什么约束，理论上这可能让最后的协方差超过预期的范围，不过实践中这种情况这并没有发生过，可以假定应该是这个神经网络的定义方式本身已经对其数值的上下界有了一定的约束。</p>
+<p><img src="/images/iddpm/Pasted image 20221127125740.png" alt=""><br>不过与此同时，上图的实验也证明，在扩散过程的前几步对最小化变分下界(Variational Lower BOund)而言是效用最高的。因此我们仍然可以说，协方差的选择是和训练效果、采样效果相关的。</p>
+<p>基于上述两个特殊的实验，在重新把协方差纳入考量之后，为了最大化利用协方差和效果的相关性，训练的优化目标也进一步发生改变：</p>
+<script type="math/tex; mode=display">
+L_{\text {hybrid }}=L_{\text {simple }}+\lambda L_{\mathrm{vlb}}</script><p>这里$\lambda=1e-3$</p>
+<h3 id="1-2-对噪声数据更好地进行规划"><a href="#1-2-对噪声数据更好地进行规划" class="headerlink" title="1.2- 对噪声数据更好地进行规划"></a>1.2- 对噪声数据更好地进行规划</h3><p><img src="/images/iddpm/Pasted image 20221127131446.png" alt=""><br>在DDPM中，数值从小到大，噪声的规划是线性的，但是作者发现，这种线性递增的噪音其实很有可能扩散到一半的时候，就让数据完全服从高斯分布了（上），再后面的噪声添加已经对采样、对训练没有任何意义。</p>
+<p><img src="/images/iddpm/Pasted image 20221127131521.png" alt=""><br><img src="/images/iddpm/Pasted image 20221127131849.png" alt=""><br>所以作者提出了cos噪声规划方法，使得噪声添加的量呈非线性，同时在cos噪声规划的情况下$\bar{\alpha}_t$的变化更为线性而平缓，可以有效防止数据在中途某一步突然被添加大量噪声，因此降低神经网络的训练难度，理论上一定程度提高了训练效果。</p>
+<h4 id="Cosine噪声规划"><a href="#Cosine噪声规划" class="headerlink" title="Cosine噪声规划"></a>Cosine噪声规划</h4><p>公式：</p>
+<script type="math/tex; mode=display">
+\bar{\alpha}_t=\frac{f(t)}{f(0)}, \quad f(t)=\cos \left(\frac{t / T+s}{1+s} \cdot \frac{\pi}{2}\right)^2</script><p>这种规划方法利用$s$替换了原本DDPM的噪声参数$\beta$，防止其在靠近$t=0$的时候过小，这也是因为作者团队在上述研究的发现：<br>在刚开始扩散的时候效果其实是最好的，这个时候如果噪声数量过少，不利于神经网络对噪声$\epsilon$的预测。</p>
+<p>$s=8e-3$<br>作者团队选择$\cos^2(\cdot)$的形式是因为这个函数的形状是符合作者团队对噪声规划的预期的，同时这也是一个数学中常见的函数。当然这里也可以选择其他的函数，具体什么函数更好就看后人的工作了。<br><img src="/images/iddpm/Pasted image 20221127135032.png" alt=""></p>
+<h3 id="1-3-降低梯度数据中的噪声"><a href="#1-3-降低梯度数据中的噪声" class="headerlink" title="1.3- 降低梯度数据中的噪声"></a>1.3- 降低梯度数据中的噪声</h3><p><img src="/images/iddpm/Pasted image 20221127133001.png" alt=""><br>在1.1中，对目标引入了$L_{vlb}$，但是作者也发现关于这个目标的优化实在是有点困难。上图表明$L_{hybrid}$的效果好于$L_{vlb}$，作者基于此假设：<br>$L_{vlb}$在训练时的梯度相比于$L_{hybrid}$而言，噪声更多。</p>
+<p><img src="/images/iddpm/Pasted image 20221127133209.png" alt=""><br>“McCandlish, S., Kaplan, J., Amodei, D., and Team, O. D. An empirical model of large-batch training, 2018.” —— 一个评估梯度噪声规模(Gradient Noise Scales)的方法</p>
+<p>基于这个方法，作者团队证明了自己的猜想，并为了消除这些噪声的影响，作者进一步提出假设：<br>是因为在预测时，对扩散时间点$t$的采样，是在$[0, T]$之间的均匀采样而导致的噪声，换一种对$t$的采样方法或许可以解决这个问题。</p>
+<p>于是作者引入了<strong>重要性采样(Importance Sampling)</strong>：</p>
+<script type="math/tex; mode=display">
+L_{\mathrm{vlb}}=E_{t \sim p_t}\left[\frac{L_t}{p_t}\right], \text { where } p_t \propto \sqrt{E\left[L_t^2\right]} \text { and } \sum p_t=1</script><p>其中：$E\left[L_t^2\right]$这个关于损失（时间）平方的函数的期望值是未知的，而且很有可能在训练过程中，因为损失值的变化而实时变动。作者保留了损失项的前(previous)10个数值，并且在训练过程中实时更新这个小列表。<br>训练一开始的前10步还是采用均匀采样，一旦损失项的数值个数超过10，则启用重要性采样。</p>
+<h2 id="2-采样速度"><a href="#2-采样速度" class="headerlink" title="2- 采样速度"></a>2- 采样速度</h2><p>直观上来说，经过了$T$步扩散的数据应该同样地该序列将其还原。不过作者认为，利用一个关于0~$T$的子序列$S$进行对其进行降噪采样也是可行的。</p>
+<p>基于子序列$S$，得到对应的噪声系数$\bar{\alpha}_{S_t}$，这个时候采样就变成了：</p>
+<script type="math/tex; mode=display">
+\beta_{S_t}=1-\frac{\bar{\alpha}_{S_t}}{\bar{\alpha}_{S_{t-1}}}, \quad \tilde{\beta}_{S_t}=\frac{1-\bar{\alpha}_{S_{t-1}}}{1-\bar{\alpha}_{S_t}} \beta_{S_t}</script><p>此时用于预测的含参概率模型就是：</p>
+<script type="math/tex; mode=display">
+p\left(x_{S_{t-1}} \mid x_{S_t}\right) =\mathcal{N}\left(\mu_\theta\left(x_{S_t}, S_t\right), \Sigma_\theta\left(x_{S_t}, S_t\right)\right)</script><h1 id="观点"><a href="#观点" class="headerlink" title="观点"></a>观点</h1><h2 id="1-和GAN对比"><a href="#1-和GAN对比" class="headerlink" title="1- 和GAN对比"></a>1- 和GAN对比</h2><p>GAN一般是用来训练给定分类条件的生成模型(class-conditional models)，</p>
+]]></content>
+      <categories>
+        <category>Paper</category>
+      </categories>
+      <tags>
+        <tag>Diffusion</tag>
+        <tag>Generative Model</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>基于分数(score-based)的扩散(Diffusion)模型</title>
+    <url>/2022/10/17/Score-based%20Diffusion%20Model/</url>
+    <content><![CDATA[<p>基于分数的的扩散模型，<br>原文章：<a href="https://arxiv.org/abs/2011.13456">Score-Based Generative Modeling through Stochastic Differential Equations</a></p>
+<h1 id="一、直观理解"><a href="#一、直观理解" class="headerlink" title="一、直观理解"></a>一、直观理解</h1><p>将反向降噪过程中的降噪建模成一个<strong>粒子随机运动过程</strong>，然后用langevin方程描述这个粒子随机运动，并求出一个稳定解，得出降噪过程噪点运动的物理规律，从而引导噪声的分布向原数据分布的特征进行运动，从而达到生成数据的目的。<br><img src="/images/score_based_diff/Pasted image 20221128202716.png" alt="Overview of the Score-based Diffusion Model"></p>
+<h1 id="二、正向扩散过程"><a href="#二、正向扩散过程" class="headerlink" title="二、正向扩散过程"></a>二、正向扩散过程</h1><h2 id="随机微分方程建模（从离散到连续）"><a href="#随机微分方程建模（从离散到连续）" class="headerlink" title="随机微分方程建模（从离散到连续）"></a>随机微分方程建模（从离散到连续）</h2><p>思路依然是基于DDPM的分解方法，将噪音添加的过程分为 $T$ 步。只是DDPM中这个步数 $T$ 是人为设计的、<strong>离散的</strong>，按照直观的理解，这个噪音添加包括降噪的过程应该是连续的，为了消除这个人为的影响。</p>
+<p>这里就用一个随机微分方程（SDE）进行建模，使得diffusion的正向、反向过程在时间维度上<strong>达到连续</strong>。</p>
+<p>每一次对数据进行噪声的添加，如此一次性的、离散的行为，用随机微分方程来表达可以写作：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t=\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>其中：</p>
+<ul>
+<li>$\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t$ 表示的是<strong>确定</strong>项；</li>
+<li>$g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}$ 表示的是<strong>随机</strong>项；<br>由于 $\boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})$ ，噪声一直服从一个标准正态分布。与此同时需要保证随机效应在这个过程之中一直存在，因此关于随机项的系数是个 $\sqrt{\Delta t}$ </li>
+</ul>
+<p>为了使其具备连续性，对上式取极限，使得 $\Delta t \rightarrow 0$ ，可得其连续的扩散过程的微分： </p>
+<script type="math/tex; mode=display">
+d \boldsymbol{x}=f_t(\boldsymbol{x}) d t+g_t d \boldsymbol{w}</script><p>在这种情况下，扩散过程不必告知其扩散步数，只需要看关于时间 $t$ 的微分能取多小。</p>
+<h3 id="好处"><a href="#好处" class="headerlink" title="好处"></a>好处</h3><ul>
+<li>在分析这个扩散过程的时候，可以利用连续的随机微分方程对其进行建模分析，使其理论上更可信。</li>
+<li>在代码实现的时候，可以参照第一个式子，选取合适的离散化方案，就可以对其进行数值计算。<br>整体上实现了将理论分析与程序实现分离的功能。</li>
+</ul>
+<h1 id="三、反向降噪过程"><a href="#三、反向降噪过程" class="headerlink" title="三、反向降噪过程"></a>三、反向降噪过程</h1><p>由于没有办法直接写出反向过程的表达式，所以这里倾向于先写出正向的概率公式，再利用贝叶斯公式得到降噪过程的表达式。</p>
+<p>对于一个极短的时间间隔 $\Delta t$ 内的<strong>正向</strong>过程，可以用条件概率公式表达为：</p>
+<script type="math/tex; mode=display">
+\begin{aligned}
+q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) &=\mathcal{N}\left(\boldsymbol{x}_{t+\Delta t} ; \boldsymbol{x}_t+\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t, g_t^2 \Delta t \boldsymbol{I}\right) \propto \exp \left(-\frac{\left\|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right\|^2}{2 g_t^2 \Delta t}\right)
+\end{aligned}</script><p>后面只写相关不写等式是为了略去一些常数项参数的干扰。这里利用贝叶斯定理，反向过程可以被表征为：</p>
+<script type="math/tex; mode=display">
+p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right)=\frac{q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) p\left(\boldsymbol{x}_t\right)}{p\left(\boldsymbol{x}_{t+\Delta t}\right)}</script><script type="math/tex; mode=display">
+=q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) \exp \left(\log p\left(\boldsymbol{x}_t\right)-\log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right)</script><p>带入正向过程得到的相关系数，可以得到反向过程相关于：</p>
+<script type="math/tex; mode=display">
+\propto \exp \left(-\frac{\left\|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right\|^2}{2 g_t^2 \Delta t}+\log p\left(\boldsymbol{x}_t\right)-\log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right)</script><p>此时需要注意到：<br>为了让这个过程连续，$\Delta t$ 需要足够小。而当 $\Delta t$ 足够小时，为了使得概率模型 $p\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right)\neq 0$ ，也即使得其概率明显大于0，成为值得被考量的<a href="https://zh.m.wikipedia.org/zh-hans/%E6%98%BE%E8%91%97%E6%80%A7%E5%B7%AE%E5%BC%82">显著事件</a>。</p>
+<p>为了满足上述情况下的各种需求，只有令 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 足够接近时，$\frac{\left|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right|^2}{2 g_t^2 \Delta t}$ 才会趋于0，从而使得 $\exp \left(-\frac{\left|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t\right|^2}{2 g_t^2 \Delta t}\right)$ 趋于1，使得该概率模型的值明显不等于0。</p>
+<p>因此针对 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 的关联进行数学描述，此处使用对数函数的一阶泰勒展开：</p>
+<script type="math/tex; mode=display">
+\log p\left(\boldsymbol{x}_{t+\Delta t}\right) \approx \log p\left(\boldsymbol{x}_t\right)+\left(\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t\right) \cdot \nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)+\Delta t \frac{\partial}{\partial t} \log p\left(\boldsymbol{x}_t\right)</script><p>将这个式子作为一个结论，回代到反向过程的数学描述中：</p>
+<script type="math/tex; mode=display">
+p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right) \propto \exp \left(-\frac{\left\|\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t-\left[\boldsymbol{f}_t\left(\boldsymbol{x}_t\right)-g_t^2 \nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)\right] \Delta t\right\|^2}{2 g_t^2 \Delta t}+\mathcal{O}(\Delta t)\right)</script><p>$\text { 当 } \Delta t \rightarrow 0 \text { 时, } \mathcal{O}(\Delta t) \rightarrow 0 \text { 不起作用, 因此： }$</p>
+<script type="math/tex; mode=display">
+\approx \exp \left(-\frac{\left\|\boldsymbol{x}_t-\boldsymbol{x}_{t+\Delta t}+\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t\right\|^2}{2 g_{t+\Delta t}^2 \Delta t}\right)</script><p>此处因为 $\Delta t \rightarrow 0$ ，$f_t(\cdot) \sim f_{t+\Delta t}(\cdot)$，同理 $g^2_t(\cdot) \sim g^2_{t+\Delta t}(\cdot)$ ，其余都是这么近似将下标从 $t$ 替换成 $t+\Delta t$ 。</p>
+<p>将上述表达式凑成一个高斯分布的话，我们就可以得知，反向降噪概率模型 $p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right)$ 可以近似成一个高斯分布，参数为：</p>
+<ul>
+<li>均值： <script type="math/tex; mode=display">
+\boldsymbol{x}_{t+\Delta t}-\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t</script></li>
+<li>协方差： $g_{t+\Delta t}^2 \Delta t \boldsymbol{I}$</li>
+</ul>
+<p>再度取 $\Delta t \rightarrow 0$ ，利用SDE对其建模，可以得到：</p>
+<script type="math/tex; mode=display">
+d \boldsymbol{x}=\left[\boldsymbol{f}_t(\boldsymbol{x})-g_t^2 \nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})\right] d t+g_t d \boldsymbol{w}</script><p>这就是降噪过程的SDE。</p>
+<h2 id="分数匹配（Score-Matching）"><a href="#分数匹配（Score-Matching）" class="headerlink" title="分数匹配（Score Matching）"></a>分数匹配（Score Matching）</h2><h3 id="1）从连续出发，再次的离散化"><a href="#1）从连续出发，再次的离散化" class="headerlink" title="1）从连续出发，再次的离散化"></a>1）从连续出发，再次的离散化</h3><p>既然已经得到了逆向的SDE，<strong>只要再知道 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$（分数（score））</strong> 就可以将SDE再度离散化，实现一步一步离散化的去噪：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{x}_t-\boldsymbol{x}_{t+\Delta t}=-\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t+g_{t+\Delta t}^2 \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>描述的是 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 之间的差距，对比一下正向过程的：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{x}_{t+\Delta t}-\boldsymbol{x}_t=\boldsymbol{f}_t\left(\boldsymbol{x}_t\right) \Delta t+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>$\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$ 中，$p_t(\boldsymbol{x})$ 等价于前面的 $p\left(\boldsymbol{x}_t\right)$ ，表征扩散到t时刻时的边缘分布。为了得知 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$ ，先需要得知 $p\left(\boldsymbol{x}_t\right)$ 。</p>
+<p>欲知 $p\left(\boldsymbol{x}_t\right)$ 可以构建一个条件概率 $p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ ，使得 $p\left(\boldsymbol{x}_t\right)$ 可以通过 $p\left(\boldsymbol{x}_t\right)=\int p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right) d \boldsymbol{x}_0$ 而被求得。<em>当离散SDE中的 $\boldsymbol{f}_t(\boldsymbol{x})$ 是关于 $x$ 的线性函数的话</em>它就可以被求出解析解：</p>
+<script type="math/tex; mode=display">
+q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=\lim _{\Delta t \rightarrow 0} \int \cdots \iint q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t-\Delta t}\right) q\left(\boldsymbol{x}_{t-\Delta t} \mid \boldsymbol{x}_{t-2 \Delta t}\right) \cdots q\left(\boldsymbol{x}_{\Delta t} \mid \boldsymbol{x}_0\right) d \boldsymbol{x}_{t-\Delta t} \boldsymbol{x}_{t-2 \Delta t} \cdots \boldsymbol{x}_{\Delta t}</script><p>如此就可以写出：</p>
+<script type="math/tex; mode=display">
+p\left(\boldsymbol{x}_t\right)=\int q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right) d \boldsymbol{x}_0=\mathbb{E}_{\boldsymbol{x}_0}\left[q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]</script><p>带入 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$ 中可得：</p>
+<script type="math/tex; mode=display">
+\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)=\frac{\mathbb{E}_{\boldsymbol{x}_0}\left[\nabla_{\boldsymbol{x}_t} p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}=\frac{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}</script><p>这个数学解析角度的<strong>好处：</strong></p>
+<ul>
+<li>因为 $p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ 的解析解可以求得（基于上述线性假设）</li>
+<li>因为其形式形似加权平均</li>
+<li>所以可以进行直接计算<br><strong>缺点：</strong></li>
+<li>计算量太大<br>  需要对全体训练样本计算加权平均</li>
+<li>泛化能力不够<br>  只用到了训练样本</li>
+</ul>
+<p>为了改善这些缺点，也即加快计算速度、提高泛化能力，这里构建一个神经网络（分数网络）$s_\theta\left(x_t, t\right)$ 对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 进行估计。</p>
+<h3 id="2）分数匹配"><a href="#2）分数匹配" class="headerlink" title="2）分数匹配"></a>2）分数匹配</h3><p>需要让 $s_\theta\left(x_t, t\right)$ 对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 的估计越准确越好，我们需要设计一个优化目标。<br>这个优化目标灵感来自对某一个样本数据的<strong>均值</strong>进行估计的目标：</p>
+<script type="math/tex; mode=display">
+\mathbb{E}[\boldsymbol{x}]=\underset{\boldsymbol{\mu}}{\arg \min } \mathbb{E}_{\boldsymbol{x}}\left[\|\boldsymbol{\mu}-\boldsymbol{x}\|^2\right]</script><p>很容易可以知道，在最小化了 $|\boldsymbol{\mu}-\boldsymbol{x}|^2$ 的均值之后，此时的 $\mu$ 就无限接近于 $x$ 的均值。<br>同样的，对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 进行估计，根据上面的描述，等价于对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ 的加权平均的估计，即估计：</p>
+<script type="math/tex; mode=display">
+\frac{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right]}{\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]}</script><p>分母部分的 $\mathbb{E}_{\boldsymbol{x}_0}\left[p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right]$ 是一个常量不含参，起到的作用是调节loss的权重，为了简化计算将其省略。如此最终的损失函数便是：</p>
+<script type="math/tex; mode=display">
+\begin{aligned}
+& \int \mathbb{E}_{\boldsymbol{x}_0}\left[q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right] d \boldsymbol{x}_t \\
+=& \mathbb{E}_{\boldsymbol{x}_0, \boldsymbol{x}_t \sim q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right)}\left[\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right]
+\end{aligned}</script><h3 id="3）-求解SDE"><a href="#3）-求解SDE" class="headerlink" title="3） 求解SDE"></a>3） 求解SDE</h3><p>求解思路：对正向过程</p>
+<script type="math/tex; mode=display">
+q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_t \boldsymbol{x}_0, \bar{\beta}_t^2 \boldsymbol{I}\right)</script><p>为使得噪音越加越多，得到从 $t=0$ 到 $t=1$ 过程的边界条件为：</p>
+<script type="math/tex; mode=display">
+\bar{\alpha}_0=1, \quad \bar{\alpha}_1=0, \quad \bar{\beta}_0=0, \quad \bar{\beta}_1=1</script><p>再对每一个被离散化的正向过程进行分析，得到每一次离散化的加噪过程可以被概率模型描述为：</p>
+<script type="math/tex; mode=display">
+q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_0\right)=\int q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) d \boldsymbol{x}_t</script><p>其中：</p>
+<ol>
+<li>$q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_0\right)$<ul>
+<li>概率模型表达式： $\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_{t+\Delta t} \boldsymbol{x}_0, \bar{\beta}_{t+\Delta t}^2 \boldsymbol{I}\right)$</li>
+<li>采样方式： $\boldsymbol{x}_{t+\Delta t}=\bar{\alpha}_{t+\Delta t} \boldsymbol{x}_0+\bar{\beta}_{t+\Delta t} \boldsymbol{\varepsilon}$</li>
+</ul>
+</li>
+<li>$q\left(x_t \mid x_0\right)$<ul>
+<li>概率模型表达式： $\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_t \boldsymbol{x}_0, \bar{\beta}_t^2 \boldsymbol{I}\right)$</li>
+<li>采样方式： $\boldsymbol{x}_t=\bar{\alpha}_t \boldsymbol{x}_0+\bar{\beta}_t \boldsymbol{\varepsilon}_1$</li>
+</ul>
+</li>
+<li>$q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right)$<ul>
+<li>概率模型表达式： $\mathcal{N}\left(\boldsymbol{x}_{t+\Delta t} ;\left(1+f_t \Delta t\right) \boldsymbol{x}_t, g_t^2 \Delta t \boldsymbol{I}\right)$</li>
+<li>采样方式： $\boldsymbol{x}_{t+\Delta t}=\left(1+f_t \Delta t\right) \boldsymbol{x}_t+g_t \Delta t \boldsymbol{\varepsilon}_2$</li>
+</ul>
+</li>
+<li>$\int q\left(\boldsymbol{x}_{t+\Delta t} \mid \boldsymbol{x}_t\right) q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) d \boldsymbol{x}_t$<ul>
+<li>采样方式： $\begin{aligned} &amp; \boldsymbol{x}_{t+\Delta t} \\=&amp;\left(1+f_t \Delta t\right) \boldsymbol{x}_t+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}_2 \\=&amp;\left(1+f_t \Delta t\right)\left(\bar{\alpha}_t \boldsymbol{x}_0+\bar{\beta}_t \boldsymbol{\varepsilon}_1\right)+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}_2 \\=&amp;\left(1+f_t \Delta t\right) \bar{\alpha}_t \boldsymbol{x}_0+\left(\left(1+f_t \Delta t\right) \bar{\beta}_t \boldsymbol{\varepsilon}_1+g_t \sqrt{\Delta t} \boldsymbol{\varepsilon}_2\right) \end{aligned}$</li>
+</ul>
+</li>
+</ol>
+<p>根据 $d x=f_t x d t+g_t d w$ 求解得到：</p>
+<script type="math/tex; mode=display">
+\begin{aligned}
+&\bar{\alpha}_{t+\Delta t}=\left(1+f_t \Delta t\right) \bar{\alpha}_t \\
+&\bar{\beta}_{t+\Delta t}^2=\left(1+f_t \Delta t\right)^2 \bar{\beta}_t^2+g_t^2 \Delta t
+\end{aligned}</script><p>得知了每一次正向过程噪声添加的<em>噪声系数在微分尺度下的表达</em>，这时候再让 $\Delta t \rightarrow 0$</p>
+<script type="math/tex; mode=display">
+f_t=\frac{d}{d t}\left(\ln \bar{\alpha}_t\right)=\frac{1}{\bar{\alpha}_t} \frac{d \bar{\alpha}_t}{d t}, \quad g^2(t)=\bar{\alpha}_t^2 \frac{d}{d t}\left(\frac{\bar{\beta}_t^2}{\bar{\alpha}_t^2}\right)=2 \bar{\alpha}_t \bar{\beta}_t \frac{d}{d t}\left(\frac{\bar{\beta}_t}{\bar{\alpha}_t}\right)</script><p>又因为：$\bar{\alpha}_t^2+\bar{\beta}_t^2=1$ ，以及 $x_t=\bar{\alpha}_t x_0+\bar{\beta}_t \varepsilon$ ，得到score的表达式：</p>
+<script type="math/tex; mode=display">
+\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=-\frac{\boldsymbol{x}_t-\bar{\alpha}_t \boldsymbol{x}_0}{\bar{\beta}_t^2}=-\frac{\boldsymbol{\varepsilon}}{\bar{\beta}_t}</script><p>由于分数网络是对上式进行的匹配，上式表明score正比于负的噪声，所以分数网络也可以被写作：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{s} \boldsymbol{\theta}\left(\boldsymbol{x}_t, t\right)=-\frac{\boldsymbol{\epsilon} \boldsymbol{\theta}\left(\boldsymbol{x}_t, t\right)}{\bar{\beta}_t}</script><p>最后优化目标在SDE得解之后可以被写作：</p>
+<script type="math/tex; mode=display">
+\frac{1}{\bar{\beta}_t^2} \mathbb{E}_{\boldsymbol{x}_0 \sim \tilde{p}\left(\boldsymbol{x}_0\right), \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})}\left[\left\|\boldsymbol{\epsilon}_{\boldsymbol{\theta}}\left(\bar{\alpha}_t \boldsymbol{x}_0+\bar{\beta}_t \boldsymbol{\varepsilon}, t\right)-\boldsymbol{\varepsilon}\right\|^2\right]</script><h1 id=""><a href="#" class="headerlink" title=" "></a> </h1><h4 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h4><p><a href="https://spaces.ac.cn/archives/9209">生成扩散模型漫谈（五）：一般框架之SDE篇(苏剑林)</a></p>
+]]></content>
+      <categories>
+        <category>AI Model</category>
+      </categories>
+      <tags>
+        <tag>Diffusion</tag>
+        <tag>Generative Model</tag>
+        <tag>Stochastic Differential Equation</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model)</title>
+    <url>/2022/10/17/Multiscale%20complexity%20fluctuation%20behaviours%20of%20stochastic%20interacting%20cryptocurrency%20price%20model/</url>
+    <content><![CDATA[<p>【随机接触模型】建模的【加密货币价格模型】中的【多尺度】【复杂】【波动】【行为】<br>作者：Zhiyong Zheng, Yunfan Lu, Junhuan Zhang<br>文章：<a href="https://www-sciencedirect-com.libezproxy.must.edu.mo/science/article/pii/S0378437122000528?casa_token=hmttd1BwfH8AAAAA:8jXXld71BYJ0PYHU3TWzRUvWyrfi2VqYoW3XZozBNv8LUP6A_HvHvXPEQraq-3BJODue88bD0Bfe">Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model</a></p>
+<h1 id="问题背景"><a href="#问题背景" class="headerlink" title="问题背景"></a>问题背景</h1><p>加密货币市场的波动已经开始能世界范围内影响各地的投资市场了。</p>
+<h1 id="关键引用"><a href="#关键引用" class="headerlink" title="关键引用"></a>关键引用</h1><ul>
+<li>C. Baek, M. Elbeck, Bitcoins as an investment or speculative vehicle? A first look, Appl. Econ. Lett. 22 (1) (2015) 30–34 - <em>“Bitcoin market returns are mostly internally driven by market participants”, which means the extreme volatility of cryptocurrencies could be only caused by the panic and fear of investors theoretically</em> - 比特币市场的收益的波动，大部分都是被市场参与者从内部所驱动的。这也就说明加密货币市场中价格的极端波动，理论上是因为投资者的集体性恐慌。</li>
+</ul>
+<h1 id="随机接触传染模型"><a href="#随机接触传染模型" class="headerlink" title="随机接触传染模型"></a>随机接触传染模型</h1><h2 id="模型假设："><a href="#模型假设：" class="headerlink" title="模型假设："></a>模型假设：</h2><ul>
+<li>受到感染的个体将会依据速率为$\lambda$的泊松过程，向其左右邻扩散病毒。</li>
+<li>一个健康个体在接触到邻舍传来的病毒时，会立刻转变为被感染状态，并且向左右邻扩散病毒。通过在分布$F$中随机采样得到一个时间$f$，经过$f$单位时间后，此人获得免疫。</li>
+<li>免疫了的人将不再收到相同病毒的感染。</li>
+<li>病毒的传播过程以及感染周期的随机过程之间两两独立。</li>
+</ul>
+<h2 id="模型过程"><a href="#模型过程" class="headerlink" title="模型过程"></a>模型过程</h2><p>状态空间：$\{1, i, 0\}^{\mathbb{Z}}$， $\mathbb{Z} \times \mathbb{R}_{+}$代表传播链长度，其中：</p>
+<ul>
+<li>1表示健康</li>
+<li>0表示免疫</li>
+<li>$i$表示染疫<br>对每对满足$|x-\tilde{x}|=1(x, \tilde{x} \in \mathbb{Z})$链条节点$(x, \tilde{x})$，建立两个相互独立的泊松过程：</li>
+<li>$\left\{U_n^{(x, \tilde{x})}, n \geq 1\right\}$，用来描述$x$单向感染$\tilde{x}$的时间节点，速率为$\lambda$</li>
+<li>$\left\{T_n^{(x)}, n \geq 1\right\}$，用来描述病患$x$自染疫到痊愈并免疫的时间周期长度，速率为$v$</li>
+</ul>
+<h2 id="参数对齐"><a href="#参数对齐" class="headerlink" title="参数对齐"></a>参数对齐</h2><p>0号病患占比$p_0=0.01$<br>康复免疫泊松过程的速率为$v=1$</p>
+<h1 id="迁移到价格模型"><a href="#迁移到价格模型" class="headerlink" title="迁移到价格模型"></a>迁移到价格模型</h1><p>利用随机接触模型的传染过程，模拟信息在不同的加密货币市场投资人之间的传递、并改变投资人投资策略的过程。<br>利用两个不同的泊松过程，模拟市场宏观中可能因为地缘政治、社会、自然环境等外因而导致的价格疾剧波动，两个泊松过程分别模拟市场价格的暴增、暴跌。</p>
+<h2 id="假设"><a href="#假设" class="headerlink" title="假设"></a>假设</h2><ul>
+<li>虚拟货币的价格变化源于投资者对于加密货币交易市场的态度。<br>  态度会如同病毒一样在投资者之间传播，使得其他人的决策产生变动。</li>
+<li>投资态度只有三种：买入、卖出、观望。<br>  以上投资者投资态度的加和表征了市场价格的羊群行为及其倾向性。</li>
+<li>投资者每天可以交易数次，但一次最多只能交易一个单位的虚拟货币。</li>
+</ul>
+<h2 id="模型组件名称缩写"><a href="#模型组件名称缩写" class="headerlink" title="模型组件名称缩写"></a>模型组件名称缩写</h2><h3 id="时间"><a href="#时间" class="headerlink" title="时间"></a>时间</h3><p>日期（天）$t \in\{1,2, \cdots, T\}$<br>每日交易时长$l$</p>
+<h3 id="价格"><a href="#价格" class="headerlink" title="价格"></a>价格</h3><p>虚拟货币在第$t$天的$s$时刻的价格：$\mathscr{P}_t(s)$，$s \in[0, l]$</p>
+<h3 id="参与者"><a href="#参与者" class="headerlink" title="参与者"></a>参与者</h3><p>加密货币市场的参与人数：$M+1$，$M$足够大<br>单个参与者在模型网格中的相对坐标系：$\{-M / 2, \ldots,-1,0,1, \ldots, M / 2\} \subset \mathbb{Z}$<br>参与者被分为三类：</p>
+<ul>
+<li>“感染者”$type-inf$，</li>
+<li>“未感染者”$type-sus$，</li>
+<li>“免疫者”$type-imm$<br>交易态度：$\zeta(t)$ with values $\{1,-1,0\}$</li>
+<li>1: 买， 概率$p_{\zeta(t)=1}$</li>
+<li>0: 观望，概率$1-p_{\zeta(t)=1}-q_{\zeta(t)=-1}$</li>
+<li>-1: 卖，概率$q_{\zeta(t)=-1}$</li>
+</ul>
+<h2 id="机制"><a href="#机制" class="headerlink" title="机制"></a>机制</h2><p>在每一个交易日$d \in t$<br>根据概率分布$\mathbb{G}$随机选取几个智能体成为感染者，剩下的都是未感染者。<br>所有的感染者的投资态度一致。</p>
+<ul>
+<li>所有感染者都声称自己有市场内幕消息</li>
+<li>未感染者都没有收到信息</li>
+<li>免疫者觉得当前这个信息是扯淡</li>
+</ul>
+<h2 id="收益"><a href="#收益" class="headerlink" title="收益"></a>收益</h2><script type="math/tex; mode=display">
+r_t=\ln \mathscr{P}_t-\ln \mathscr{P}_{t-1}, \quad t \in\{1,2, \ldots, T\}</script><p>t时刻的收益，等于ln（当前时刻价格）减去ln（上一时刻价格）<br><img src="/images/multi_scale_crypto/Pasted image 20221022130343.png" alt=""><br>收盘价格曲线说明：</p>
+<ul>
+<li>加密货币市场的收盘价格剧烈波动，繁荣与萧条都很难长期维持</li>
+<li>价格变化较大<br>盈利曲线说明：</li>
+<li>加密货币市场相当不稳定</li>
+</ul>
+<p><img src="/images/multi_scale_crypto/Pasted image 20221022131758.png" alt=""><br>BCH，BTC，ETH，LTC，XRP是加密货币的价格，DJI，SSE分别是两支股票的价格<br>表中可以得知：<br><strong>论据：</strong> 表中几个加密货币价格的<em>标准差</em>大于两个股票的价格<br>结论：<br>加密货币市场的波动变化比实际股票市场的波动更激烈。</p>
+<p><strong>论据：</strong> BCH的$\alpha_{r^+} &lt; \alpha_{r^-}$，亏损的肥尾指数大于盈利的<br>结论：<br>炒BCH出现极端亏损的情况更为频繁</p>
+<p><img src="/images/multi_scale_crypto/Pasted image 20221022133258.png" alt=""><br>刻画了5种加密货币收益的数字分布特征。<br>在a的x-linear y-log的刻画中，几个加密货币几乎都是关于0点对称的钟形曲线<br><strong>论据：</strong> 加密货币偏度(skewness)的数据都是负数<br>结论：收益向左扩散，加密货币市场具备收益的fat-tail效应</p>
+<p><img src="/images/multi_scale_crypto/Pasted image 20221022142116.png" alt=""><br>KS, AD, JB测试的关键值分别是0.041， 0.7514， 5.9377<br><strong>论据：</strong> 几种加密货币的关键值和这三种测试的关键值相去甚远</p>
+<p>结论：<br>这种加密货币在假设检验$H=1$， significan level是5%的时候，不服从于高斯分布。</p>
+<h2 id="智能体的决策聚合"><a href="#智能体的决策聚合" class="headerlink" title="智能体的决策聚合"></a>智能体的决策聚合</h2><script type="math/tex; mode=display">
+\mathscr{A}_t(s)=\left(\zeta_t\left|\sum \eta_s^\rho\right|\right) /(M+1)</script><h2 id="价格-1"><a href="#价格-1" class="headerlink" title="价格"></a>价格</h2><script type="math/tex; mode=display">
+\mathscr{P}_t^{\text {common }}=\mathscr{P}_{t-1}^{\text {common }} \exp \left\{\gamma \mathscr{A}_t(l)\right\}, \quad t \in\{1,2, \ldots, T\}</script><h3 id="金融市场的价格"><a href="#金融市场的价格" class="headerlink" title="金融市场的价格"></a>金融市场的价格</h3><script type="math/tex; mode=display">
+\mathscr{P}_t=\mathscr{P}_0 \exp \left\{\sum_{k=1}^t \gamma \mathscr{A}_k(l)+\beta_1 \sum_{j=1}^{\xi_t^1}\left|\mathscr{B}^1\left(\varpi_j\right)\right|-\beta_2 \sum_{k=1}^{\xi_t^2}\left|\mathscr{B}^2\left(\varpi_k\right)\right|\right\}, \quad t \in\{1,2, \ldots, T\}</script><p>解释：<br>每个投资人的微观决策聚合+宏观市场的涨跌=加密货币的实际价格</p>
+<h2 id="参数对齐-1"><a href="#参数对齐-1" class="headerlink" title="参数对齐"></a>参数对齐</h2><p>交易日数：$T=1000$<br>交易参与人数：$M=1000$<br>感染过程速率：$\lambda=9, 10, 11, 12, 13$</p>
+<h1 id="Composite-Multiscale-Fuzzy-Entropy复合多尺度模糊熵"><a href="#Composite-Multiscale-Fuzzy-Entropy复合多尺度模糊熵" class="headerlink" title="Composite Multiscale Fuzzy Entropy复合多尺度模糊熵"></a>Composite Multiscale Fuzzy Entropy复合多尺度模糊熵</h1><p>CMFE<br>本质上就是对各种长度的采样方法，遍历时间序列的各种组合形式.</p>
+<h2 id="引入目的"><a href="#引入目的" class="headerlink" title="引入目的"></a>引入目的</h2><p>对比衡量生成数据与真实数据背后的决策行为复杂度，以此证明该方法成功模拟了现实加密货币市场的复杂性。</p>
+<h2 id="模型"><a href="#模型" class="headerlink" title="模型"></a>模型</h2><h3 id="模糊熵"><a href="#模糊熵" class="headerlink" title="模糊熵"></a>模糊熵</h3><h4 id="计算过程"><a href="#计算过程" class="headerlink" title="计算过程"></a>计算过程</h4><p><strong>第一步：进行时间序列嵌入向量</strong><br>目标：时间序列数据$\{x(i): 1 \leq i \leq N\}$，时序长度为$N$<br>嵌入向量表示方法：</p>
+<script type="math/tex; mode=display">
+X_m(i)=\{x(i), x(i+1), \ldots, x(i+m-1)\}-\bar{x}(i)</script><p>在$i$时刻 的$m$号 嵌入$X_m(i)$就是：<br>    从$i$时刻开始，向后一共提取连续的$m$个时序数据，组成一个集合，再将集合中的所有元素减去它们的均值，以做到均一化。</p>
+<pre><code>    - 均值计算：$\bar&#123;x&#125;(i)=\frac&#123;1&#125;&#123;m&#125; \sum_&#123;k=0&#125;^&#123;m-1&#125; x(i+k)$
+    - $i$的选择范围不能让这个嵌入的取值超过本身的时序长度限制$N$: $1 \leq i \leq N-m+1$
+</code></pre><p><strong>第二步：经过模糊公式，计算两个向量之间的相似度</strong><br>对两个向量的要求：两个向量的<strong>长度一致</strong>，也即$m$一样</p>
+<p>嵌入向量间的模糊公式计算：</p>
+<script type="math/tex; mode=display">
+D_{i j}^m=\mu\left(d_{i j}^m, \zeta, r\right)=e^{-\left(\frac{d_{i j}^m}{r}\right)^\zeta}</script><p>其中：</p>
+<ul>
+<li>$\begin{aligned} d_{i j}^m &amp;=d\left[X_i^m, X_j^m\right] \\ &amp;=\max \{|x(i+k)-\bar{x}(i)-(x(j+k)-\bar{x}(j))|\end{aligned}$  最大的波动幅度差</li>
+<li>$\zeta$是选择幂（chosen power），是一个超参数（？）</li>
+<li>$r$是相似容忍限度(tolerance level），应该也是个超参数（？）</li>
+</ul>
+<p>直观解释:<br>    针对两个嵌入向量，从$i$时刻或$j$时刻起始，一步一步加大步长，寻找两个向量之间<strong>最大波动幅度差</strong>。</p>
+<p><strong>第三步：全局定义一个概率分布，用来刻画两对向量间相似程度相同的现象频次</strong><br>相似度出现频率统计公式：</p>
+<script type="math/tex; mode=display">
+\Psi^m(r)=\frac{1}{N-m} \sum_{i=1}^{N-m}\left(\frac{1}{N-m-1} \sum_{j=1, j \neq i}^{N-m} D_{i j}^m\right)</script><p>给定一个区间长度$m$，给定一个容忍度$r$，计算出现频次$\Psi^m(r)$</p>
+<p>直观理解:<br>其实就是两个for循环，对所有可能的i和j进行遍历，然后再对它取平均，加和了$\chi$次就除以$\chi$求取均值。<br><strong>第四步：重复上述三个步骤，直到遍历完成</strong></p>
+<script type="math/tex; mode=display">
+\Psi^{m+1}(r)=\frac{1}{N-m-1} \sum_{i=1}^{N-m-1}\left(\frac{1}{N-m-2} \sum_{j=1, j \neq i}^{N-m-1} D_{i j}^{m+1}\right)</script><p><strong>第五步：估计模糊熵</strong></p>
+<script type="math/tex; mode=display">
+\operatorname{FuzzyEn}(m, r)=-\ln \left[\Psi^{(m+1)}(r) / \Psi^{(m)}(r)\right]</script><p>给定一个时间序列长度，一个容忍度，计算得到这个数值。</p>
+<h4 id="此模型中的引用目的"><a href="#此模型中的引用目的" class="headerlink" title="此模型中的引用目的"></a>此模型中的引用目的</h4><p>引入模糊熵来衡量时间序列的复杂度，如果生成的和实际的复杂度数值相差不大，则可以一定程度上说明。</p>
+<h4 id="为什么用模糊熵而"><a href="#为什么用模糊熵而" class="headerlink" title="为什么用模糊熵而"></a>为什么用模糊熵而</h4><ul>
+<li>模糊熵在采样长度上具有更高的独立性</li>
+<li>模糊熵的偏差更小，因其更强的相对稳定性<h4 id="参数"><a href="#参数" class="headerlink" title="参数"></a>参数</h4>m指代了分析的颗粒度，m越大，分析得也越粗糙。</li>
+</ul>
+<h3 id="多尺度的引入"><a href="#多尺度的引入" class="headerlink" title="多尺度的引入"></a>多尺度的引入</h3><p>这里的尺度意味着：不同的数据颗粒度，颗粒度越大，单次采样时序数据越多。<br>粗粒度向量：</p>
+<script type="math/tex; mode=display">
+y_\tau(i)=\frac{1}{\tau} \sum_{j=(i-1) \tau+k}^{i \tau+k-1} x(j)</script><p>$\tau$ - (scale factor)尺度系数，调整$\tau$的大小就可以调整粒度的大小，从而一定程度上压缩时序数据，同时这里的$1 \leq k \leq \tau$。这个时候，利用上面的公式进行扩展，将所有可能的$\tau$都遍历一遍，列写各种粒度下的向量：</p>
+<script type="math/tex; mode=display">\mathbf{y}_k^{(\tau)}=\left\{y_{k, i}^{(\tau)}, i=1,2, \ldots, N / \tau\right\}</script><p>再增加对k值的遍历，推演得到复合多尺度模糊熵</p>
+<script type="math/tex; mode=display">
+\operatorname{CMFE}(\tau, m, r)=\frac{1}{\tau} \sum_{k=1}^\tau\left(\operatorname{FuzzyEn}\left(\mathbf{y}_k^{(\tau)}, m, r\right)\right)</script><h2 id="参数对齐-2"><a href="#参数对齐-2" class="headerlink" title="参数对齐"></a>参数对齐</h2><p>$m=2$<br>$\zeta = 2$<br>$r = 0.15\sigma$，其中$\sigma$是对应时间序列数据的标准差。</p>
+<h1 id="Match-Energy匹配能"><a href="#Match-Energy匹配能" class="headerlink" title="Match Energy匹配能"></a>Match Energy匹配能</h1><p>ME</p>
+<h2 id="引入目的-1"><a href="#引入目的-1" class="headerlink" title="引入目的"></a>引入目的</h2><p>分析行为的复杂度</p>
+<h3 id="优点"><a href="#优点" class="headerlink" title="优点"></a>优点</h3><ul>
+<li>高速</li>
+<li>适用于较小尺度的数据集</li>
+<li>对数据复杂性的分类效果非常好</li>
+</ul>
+<h2 id="模型-1"><a href="#模型-1" class="headerlink" title="模型"></a>模型</h2><p>给定一个时序数据$\mathbf{X}=\left\{x_1, x_2, \ldots x_T\right\}$，长度为$T$<br>先利用Differential Dynamical Quantization方法进行时序数据的归一化。</p>
+<h3 id="第一步：排序"><a href="#第一步：排序" class="headerlink" title="第一步：排序"></a>第一步：排序</h3><p>去除时间因素，按照数据的数值大小进行排序<br><strong>参数：</strong>$\mathbf{X}$<br>输出：<br>    升序：$\mathbf{P}=\left\{p_1, p_2, \ldots p_T\right\}$<br>    降序：$\mathbf{Q}=\left\{q_1, q_2, \ldots q_T\right\}$</p>
+<h3 id="第二步：-构建嵌入向量"><a href="#第二步：-构建嵌入向量" class="headerlink" title="第二步： 构建嵌入向量"></a>第二步： 构建嵌入向量</h3><p>超参数：</p>
+<ul>
+<li>嵌入(embedding)维度 $m$</li>
+<li>延时系数 $\tau$，其中$1 \leq \tau \leq m$<br><strong>参数：</strong> $\mathbf{X}, \mathbf{P}, \mathbf{Q}$<br>输出：<br>  $\mathbf{x}_i=\left\{x_{i \tau}, x_{i \tau+1}, \ldots, x_{i \tau+(m-1)}\right\}$<br>  $\mathbf{p}_i = \left\{p_{i \tau}, p_{i \tau+1}, \ldots, p_{i \tau+(m-1)}\right\}$<br>  $\mathbf{q}_i=\left\{q_{i \tau}, q_{i \tau+1}, \ldots, q_{i \tau+(m-1)}\right\}$</li>
+</ul>
+<h3 id="第三步：对嵌入向量排序"><a href="#第三步：对嵌入向量排序" class="headerlink" title="第三步：对嵌入向量排序"></a>第三步：对嵌入向量排序</h3><p><strong>参数：</strong>$\mathbf{x}_i=\left\{x_{i \tau}, x_{i \tau+1}, \ldots, x_{i \tau+(m-1)}\right\}$<br>输出：<br>    升序：$\mathbf{y}_i$<br>    降序：$\mathbf{z}_i$</p>
+<h3 id="第四步：构建匹配坐标系"><a href="#第四步：构建匹配坐标系" class="headerlink" title="第四步：构建匹配坐标系"></a>第四步：构建匹配坐标系</h3><p><strong>参数：</strong> 升序比较（$\mathbf{p}_i$ with $\mathbf{y}_i$）【匹配坐标数$m_1$】<br>输出：<br>    匹配坐标系：$\mathbf{V}^{(\mathbf{1})}$<br>        本质：向量空间</p>
+<p><strong>参数：</strong> 降序比较（$\mathbf{q}_i$ with $\mathbf{z}_i$）【匹配坐标数$m_1^{\prime}$】<br>输出：<br>    不匹配坐标系：$\mathbf{V}^{(\mathbf{2})}$<br>        本质：向量空间<br>        维度：$m-m_1$</p>
+<h3 id="第五步：向量投影并计算能量"><a href="#第五步：向量投影并计算能量" class="headerlink" title="第五步：向量投影并计算能量"></a>第五步：向量投影并计算能量</h3><script type="math/tex; mode=display">
+E_{i-}=\sqrt{\frac{1}{m_1} \sum_{j=1}^{m_1}\left(\mathbf{x}_i^{(1)}(j)-\overline{\mathbf{x}_i^{(1)}}\right)^2}</script><script type="math/tex; mode=display">
+E_{i+}=\sqrt{\frac{1}{m-m_1} \sum_{j=1}^{m-m_1}\left(\mathbf{x}_i^{(2)}(j)-\overline{\mathbf{x}_i^{(2)}}\right)^2}</script><p><strong>参数：</strong>$\mathbf{x}_i$， $\mathbf{V}^{(\mathbf{1})}$， $\mathbf{V}^{(\mathbf{2})}$<br>输出：<br>    在升序匹配坐标系的投影：$\mathbf{x}_i^{(1)}$<br>    在降序匹配坐标系的投影：$\mathbf{x}_i^{(2)}$</p>
+<p><strong>参数：</strong>$\mathbf{x}_i^{(1)}$， $\mathbf{x}_i^{(2)}$,           $\mathbf{x}_i^{(1)}$的均值 $\overline{\mathbf{x}_i^{(1)}}$,          $\mathbf{x}_i^{(2)}$的均值 $\overline{\mathbf{x}_i^{(2)}}$<br>输出：<br>    升序匹配能：$E_{i-}$<br>    降序匹配能：$E_{i+}$</p>
+<h3 id="第六步：将排序后的嵌入向量也进行第五步的计算，并且计算它们之间的距离"><a href="#第六步：将排序后的嵌入向量也进行第五步的计算，并且计算它们之间的距离" class="headerlink" title="第六步：将排序后的嵌入向量也进行第五步的计算，并且计算它们之间的距离"></a>第六步：将排序后的嵌入向量也进行第五步的计算，并且计算它们之间的距离</h3><script type="math/tex; mode=display">
+d_{i-}=\frac{1}{2}\left(d_{i-}^{(p)}+d_{i-}^{(q)}\right)</script><script type="math/tex; mode=display">
+d_{i-}^{(p)}=\sqrt{\frac{1}{m_1} \sum_{j=1}^{m_1}\left(\mathbf{y}_i^{(1)}(j)-\mathbf{p}_i^{(1)}(j)\right)^2} \text { and } d_{i-}^{(q)}=\sqrt{\frac{1}{m_1^{\prime}} \sum_{j=1}^{m_1^{\prime}}\left(\mathbf{z}_i^{(1)}(j)-\mathbf{q}_i^{(1)}(j)\right)^2}</script><script type="math/tex; mode=display">
+d_{i+}=\frac{1}{2}\left(d_{i+}^{(p)}+d_{i+}^{(q)}\right)</script><script type="math/tex; mode=display">
+d_{i+}^{(p)}=\sqrt{\frac{1}{m-m_1} \sum_{j=1}^{m-m_1}\left(\mathbf{y}_i^{(2)}(j)-\mathbf{p}_i^{(2)}(j)\right)^2} \text { and } d_{i+}^{(q)}=\sqrt{\frac{1}{m-m_1^{\prime}} \sum_{j=1}^{m-m_1^{\prime}}\left(\mathbf{z}_i^{(2)}(j)-\mathbf{q}_i^{(2)}(j)\right)^2}</script><h3 id="第七步：利用上述数据构筑局部能量模型"><a href="#第七步：利用上述数据构筑局部能量模型" class="headerlink" title="第七步：利用上述数据构筑局部能量模型"></a>第七步：利用上述数据构筑局部能量模型</h3><script type="math/tex; mode=display">
+E_i(m)=\left\{\begin{array}{cc}
+E_{i-}+d_{i-}=0, & \text { if } m_1+m_1^{\prime} \neq 0 \\
+E_{i+}+d_{i+}, & \text { if } m_1+m_1^{\prime}=0
+\end{array}\right.</script><h3 id="第八步：将所有的局部能量取均值得到匹配能ME"><a href="#第八步：将所有的局部能量取均值得到匹配能ME" class="headerlink" title="第八步：将所有的局部能量取均值得到匹配能ME"></a>第八步：将所有的局部能量取均值得到匹配能ME</h3><script type="math/tex; mode=display">
+\mathrm{ME}=\frac{1}{T} \sum_{i=0}^{T-1} E_i(m)</script>]]></content>
+      <categories>
+        <category>Paper</category>
+      </categories>
+      <tags>
+        <tag>Stochastic Process</tag>
+        <tag>Cryptocurrency market</tag>
+        <tag>Multi-agent System</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>TS2Vec：一种更普适的时序数据表征方式</title>
+    <url>/2023/01/02/TS2Vec%20Towards%20Universal%20Representation%20of%20Time%20Series/</url>
+    <content><![CDATA[<p>作者：Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu<br>原文：<a href="https://arxiv.org/abs/2106.10466">戳我</a><br>代码：<a href="https://github.com/yuezhihan/ts2vec">戳戳我</a></p>
+<h1 id="一、核心看点"><a href="#一、核心看点" class="headerlink" title="一、核心看点"></a>一、核心看点</h1><ul>
+<li>利用一种<strong>多层对比学习</strong>的方法，为时序数据中每一个时间点提供一个更为好用的上下文表征方法。</li>
+<li>通过在时间点上执行一个简洁的数据聚合方法，使得在时序数据中的<strong>任意一个子序列</strong>都可以被表征。</li>
+</ul>
+<h1 id="二、研究动机"><a href="#二、研究动机" class="headerlink" title="二、研究动机"></a>二、研究动机</h1><ul>
+<li>实例层级（Instance-level）的表征方法可能没有办法很好注入时序预测、异常检测之类的适配细粒度（fine-grained）的任务。</li>
+<li>针对现有各种的表征方法中，在表征某一个时间点的上下文(contextual)信息时，上下文的覆盖范围不够灵活，窗口大小相对固定。<ul>
+<li>多尺度的表征方法可以提高其泛化性，使其对更多的下游任务都能适配。</li>
+</ul>
+</li>
+<li>目前针对时序数据的无监督式表征学习方法，大部分都是从cv或者nlp领域照搬过来的。</li>
+</ul>
+<h1 id="三、问题建模"><a href="#三、问题建模" class="headerlink" title="三、问题建模"></a>三、问题建模</h1><p>对包含 $N$ 个实例的时序数据 $\mathcal{X}=\left\{x_1, x_2, \cdots, x_N\right\}, x_i \in \mathbb{R}^{T \times F}$ ( $T$ 表示的是序列长度， $F$ 表示的是特征维度)，构建一个非线性的嵌入(embedding)映射，将每一个 $x_i$ 映射成对应的表征量 $r_i$ 。<br>针对第i个实例 $x_i$ ，经过嵌入映射后得到的其表征向量写作$r_i=\left\{r_{i, 1}, r_{i, 2}, \cdots, r_{i, T}\right\}, r_{i, t} \in \mathbb{R}^K$，此处 $K$ 表示的是用户自定义的嵌入维度。</p>
+<h1 id="四、模型概览"><a href="#四、模型概览" class="headerlink" title="四、模型概览"></a>四、模型概览</h1><p><img src="/images/ts2vec/Pasted image 20230104155411.png" alt=""></p>
+<ol>
+<li>针对第 $i$ 个实例 $x_i$， 从里面随机选取<strong>一对</strong>在时间维度上相交的子序列（ $a_1$ , $b_1$）和 ( $a_2$, $b_2$ )<br> 两序列在( $a_2$ , $b_1$ )段重合<br> $0&lt;a_1 \leq a_2 \leq b_1 \leq b_2 \leq T$<br> 两个子序列相交的原因：方便检验该方法在两个子序列上，其相交部分的上下文表征具备一致性。</li>
+<li>这两段子序列都会被输入一个编码器（<em>encoder</em>）。<br> 该编码器利用 <strong>contrastive loss</strong> 和 <strong>instance-wise contrastive loss</strong> 进行共同训练。<br> 编码器分为三层：<ol>
+<li>输入映射层( <em>Input Projection Layer</em>)<br> 将 $x_{i, t}$ 映射为隐变量 $z_{i, t}$ ，后者的维度将高于前者<br> 模型：全连接层</li>
+<li>时间点掩码层( <em>Timestamp Masking</em> )<br> 对隐变量$z_{i, t}$ ，随机选取时间点进行遮掩。下图打问号的部分就是被掩码遮蔽的区域。<br> 对于一对子序列，这段操作就是在它们的相交部分，选择一段时间的数据进行单向、双向的遮蔽，并检查这两段子序列的嵌入向量，在这个遮掩区域的表征是否一致。<br> 数学表达： $m \in\{0,1\}^T$<br> 选取方法：在 $p=0.5$ 的伯努利分布上采样<br> <img src="/images/ts2vec/Pasted image 20230104170806.png" alt=""></li>
+<li>扩张卷积层 ( <em>Dilated Convolution</em> )<br> 对每个时间点抽取其上下文特征<br> 模型：10个res blocks，每一个res block包含两个1D卷积层</li>
+</ol>
+</li>
+<li><p>进行多层级的对比( <em>Hierarchical Contrasting</em> )<br> 对于同一个实例 $x_i$， 在时间点 $t$ 上，选取用于表征它的、数值不同的两个嵌入向量 $r_{i, t}$ 与 $r^\prime_{i, t}$ 。<br> 计算其<strong>时间维度</strong>上的表征差异：</p>
+<script type="math/tex; mode=display">
+\ell_{t e m p}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{t^{\prime} \in \Omega}\left(\exp \left(r_{i, t} \cdot r_{i, t^{\prime}}^{\prime}\right)+\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)\right)}</script><p> 其中：$\Omega$ 表征的是这对子序列相交的那一部分数据对应的时间段。<br> $\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)$ 表示当 $t \neq t^{\prime}$ 时，才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 再计算<strong>整体</strong>上二者的表征差异：</p>
+<script type="math/tex; mode=display">
+\ell_{i n s t}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{j=1}^B\left(\exp \left(r_{i, t} \cdot r_{j, t}^{\prime}\right)+\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)\right)}</script><p> 其中： $B$ 表征的是一个训练批次的大小（batch size）。<br> $\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)$ 表示当 $i \neq j$ 的时候才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 将这两者聚合：</p>
+<script type="math/tex; mode=display">
+\mathcal{L}_{d u a l}(r_{i, t} , r^\prime_{i, t})=\frac{1}{N T} \sum_i \sum_t\left(\ell_{t e m p}^{(i, t)}+\ell_{i n s t}^{(i, t)}\right)</script><p> 再利用maxpooling技术，不断压缩这对子序列数据，再在压缩了的数据上执行对比计算，直到子序列的长度被压缩为1.<br><img src="/images/ts2vec/Pasted image 20230104220210.png" alt=""></p>
+</li>
+</ol>
+]]></content>
+      <categories>
+        <category>Paper</category>
+      </categories>
+      <tags>
+        <tag>CNN</tag>
+        <tag>Representation Learning</tag>
+        <tag>Time Series</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>用统一的连贯视角，解析扩散模型</title>
+    <url>/2022/10/28/Understanding%20Diffusion%20Models%20A%20Unified%20Perspective/</url>
+    <content><![CDATA[<p>原文：<a href="https://arxiv.org/abs/2208.11970">戳我</a><br>作者： Calvin Luo</p>
+<h1 id="行文架构"><a href="#行文架构" class="headerlink" title="行文架构"></a>行文架构</h1><h2 id="生成模型"><a href="#生成模型" class="headerlink" title="生成模型"></a>生成模型</h2><p>定性：Diffusion属于生成模型，同属生成模型还有耳熟能详的GAN这种<strong>对抗式生成模型</strong>(adversal generative model)，以VAE为代表的<strong>最大似然生成模型</strong>(likelihood-based model)，还有从能量模型(energy-based model)演化而来的<strong>分数学习生成模型</strong>。<br>但不论何种模型，本质上都需求要求解出样本数据集$\mathbf{x}$的概率密度函数$p(\mathbf{x})$，然后模型再从这个分布中采样得到我们想要的那种，与原始数据特征一致但数值不同的生成数据。</p>
+<p>利用柏拉图的洞穴人假说，引入<strong>隐变量</strong>一说，以说明某些数据中包含部分我们没有办法观察到的隐变量，正是因为这些隐变量的分布以及取值，影响到了数据本身。那么首先，<em>我们如何找到并表示隐变量？</em></p>
+<p>数学上来说，可以利用一个联合概率分布$p(\boldsymbol{x}, \boldsymbol{z})$来对隐变量$z$进行建模。利用最大似然的办法，我们可以通过这个包含隐变量的模型，对我们想要的$p(\boldsymbol{x}$进行求解。</p>
+<ul>
+<li>方法一：是对边缘概率密度函数进行积分，$p(\boldsymbol{x})=\int p(\boldsymbol{x}, \boldsymbol{z}) d \boldsymbol{z}$， 但这个方法中我们<strong>需要知道所有的隐变量</strong>，并且将它们都进行积分后整合结果，这个过程相对比较繁琐，实战中不易实现。</li>
+<li>方法二：是利用概率的链式法则，$p(\boldsymbol{x})=\frac{p(\boldsymbol{x}, \boldsymbol{z})}{p(\boldsymbol{z} \mid \boldsymbol{x})}$对其进行求解。这种情况需要我们已知一个100%保真的隐变量生成器$p(\boldsymbol{z} \mid \boldsymbol{x})$<br>上述两种方法几乎实践上都不可能直接实现，但是它们为之后关于置信下界（ELBO）的确定做好了铺垫。</li>
+</ul>
+<h2 id="置信下界"><a href="#置信下界" class="headerlink" title="置信下界"></a>置信下界</h2><p>整个这个学习过程的目标，本质上都是<strong>最大化关于$p(\boldsymbol{x})$的似然函数</strong>。<br>在引入了置信下界之后，优化目标：最大化置信下界 -&gt; 最大化对数似然<br>原因：</p>
+<p>$p(\boldsymbol{x})$的对数似然 = 置信下界 + $q_{\boldsymbol{\phi}}(\boldsymbol{z} \mid \boldsymbol{x}) | p(\boldsymbol{z} \mid \boldsymbol{x})$的KL散度（见式15）<br>$\log p(\boldsymbol{x})=$ <script type="math/tex">E_{q_\phi(\boldsymbol{z} \mid \boldsymbol{x})}\left[\log \frac{p(\boldsymbol{x}, \boldsymbol{z})}{q_\phi(\boldsymbol{z} \mid \boldsymbol{x})}\right]+D_{\mathrm{KL}}\left(q_{\boldsymbol{\phi}}(\boldsymbol{z} \mid \boldsymbol{x}) \| p(\boldsymbol{z} \mid \boldsymbol{x})\right)</script></p>
+<p>最大化置信下界一定程度等价于最小化$q_{\boldsymbol{\phi}}(\boldsymbol{z} \mid \boldsymbol{x}) | p(\boldsymbol{z} \mid \boldsymbol{x})$的KL散度，也就是使得$q_{\boldsymbol{\phi}}(\boldsymbol{z} \mid \boldsymbol{x})$ 和$p(\boldsymbol{z} \mid \boldsymbol{x})$这两个分布最大程度地接近，从而去模拟真实的隐变量生成器$p(\boldsymbol{z} \mid \boldsymbol{x})$。<br>    此时<strong>置信下界</strong>表达式为：$\mathbb{E}_{q_\phi(\boldsymbol{z} \mid \boldsymbol{x})}\left[\log \frac{p(\boldsymbol{x}, \boldsymbol{z})}{q_{\boldsymbol{\phi}}(\boldsymbol{z} \mid \boldsymbol{x})}\right]$，包含一个含参生成器$q_\phi(\boldsymbol{z} | \boldsymbol{x})$ ，旨在通过对参数$\phi$的调整，让该表达式最大化的方法，让含参生成器的效果无限接近ground truth，也最大化关于原始数据的对数似然函数。</p>
+<pre><code>- 本质上还是在做对原数据的拆解、加噪音，学习怎样解构现有数据，得到其中的隐变量。
+</code></pre><p>如此这般，现在的需求就是：<em>怎样优化使得置信下界能达到最大化？</em></p>
+<h2 id="变分自编码器"><a href="#变分自编码器" class="headerlink" title="变分自编码器"></a>变分自编码器</h2><p>有了在上述过程中最大化置信下界的优化目标，衍生出了VAE，<strong>变分自编码器</strong>，借鉴了这个对原数据的拆解思路，同时引入了在拆解之后的重构，这个重构也就是所谓的“自编码”过程。<br>鉴于此，VAE中将置信下界的数学表达式进行了进一步拆解，使得：</p>
+<p>置信下界 = 对原数据重构的期望 - 关于隐变量分布和原数据解构手法之间的KL散度。<br>$\mathbb{E}_{q_\phi(\boldsymbol{z} \mid \boldsymbol{x})}\left[\log \frac{p(\boldsymbol{x}, \boldsymbol{z})}{q_{\boldsymbol{\phi}}(\boldsymbol{z} \mid \boldsymbol{x})}\right]$=<script type="math/tex">\mathbb{E}_{q_\phi(\boldsymbol{z} \mid \boldsymbol{x})}\left[\log p_{\boldsymbol{\theta}}(\boldsymbol{x} \mid \boldsymbol{z})\right]-D_{\mathrm{KL}}\left(q_\phi(\boldsymbol{z} \mid \boldsymbol{x}) \| p(\boldsymbol{z})\right)</script></p>
+<p>后方的KL散度的“解构”指的就是，在已知样本数据的情况下，将其通过一个含参网络预测得到的隐变量分布，将其和真实的隐变量分布间进行比对。<br>这个KL散度越小，最后重构的效果也就越棒。</p>
+<p>VAE中的生成器(encoder)通常选用多元高斯分布$q_{\boldsymbol{\phi}}(\boldsymbol{z} \mid \boldsymbol{x})=\mathcal{N}\left(\boldsymbol{z} ; \boldsymbol{\mu}_\phi(\boldsymbol{x}), \boldsymbol{\sigma}_{\boldsymbol{\phi}}^2(\boldsymbol{x}) \mathbf{I}\right)$，先验分布通常是标准分布：$p(\boldsymbol{z})=\mathcal{N}(\boldsymbol{z} ; \mathbf{0}, \mathbf{I})$<br>然后对原数据重构的期望可以利用蒙特卡洛(Monte-Carlo)估计法进行估算，也就是进行$L$次无偏采样，然后对其采样值计算后加和，将其重写成：</p>
+<script type="math/tex; mode=display">\underset{\boldsymbol{\phi}, \boldsymbol{\theta}}{\arg \max } \sum_{l=1}^L \log p_{\boldsymbol{\theta}}\left(\boldsymbol{x} \mid \boldsymbol{z}^{(l)}\right)-D_{\mathrm{KL}}\left(q_{\boldsymbol{\phi}}(\boldsymbol{z} \mid \boldsymbol{x}) \| p(\boldsymbol{z})\right)</script><pre><code>这里有两个含参网络，$p_&#123;\boldsymbol&#123;\theta&#125;&#125;\left(\boldsymbol&#123;x&#125; \mid \boldsymbol&#123;z&#125;^&#123;(l)&#125;\right)$负责在采样一个$\boldsymbol&#123;z&#125;^&#123;(l)&#125;$后，预测$\boldsymbol&#123;z&#125;^&#123;(l)&#125;$对应的原样本数据。$q_&#123;\boldsymbol&#123;\phi&#125;&#125;(\boldsymbol&#123;z&#125; \mid \boldsymbol&#123;x&#125;)$在给定一个样本数据以后，预测样本对应的隐变量。
+</code></pre><h2 id="多重变分自编码器"><a href="#多重变分自编码器" class="headerlink" title="多重变分自编码器"></a>多重变分自编码器</h2><p>将VAE的模型进行扩展，就可以得到<strong>多重变分自编码器</strong>(Hierarchical Variational Encoder HVAE)，利用多重结构，利用马尔可夫链结构，对样本对应的隐变量进行更精确的表达。<br>基于其马尔可夫性，将上述关于置信下界的数学表达式进行扩展：</p>
+<script type="math/tex; mode=display">\log p(\boldsymbol{x}) \geq \mathbb{E}_{q_\phi\left(\boldsymbol{z}_{1: T} \mid \boldsymbol{x}\right)}\left[\log \frac{p\left(\boldsymbol{x}, \boldsymbol{z}_{1: T}\right)}{q_{\boldsymbol{\phi}}\left(\boldsymbol{z}_{1: T} \mid \boldsymbol{x}\right)}\right]</script><p>即：通过$q_\phi\left(\boldsymbol{z}_{1: T} \mid \boldsymbol{x}\right)$，给定样本数据集合$\boldsymbol{x}$，经过参数为$\phi$的网络采样$\boldsymbol{z}_{1: T}$ ，获取$\left[\log \frac{p\left(\boldsymbol{x}, \boldsymbol{z}_{1: T}\right)}{q_{\boldsymbol{\phi}}\left(\boldsymbol{z}_{1: T} \mid \boldsymbol{x}\right)}\right]$的期望值</p>
+<h2 id="变分扩散模型"><a href="#变分扩散模型" class="headerlink" title="变分扩散模型"></a>变分扩散模型</h2><p>在多重变分自编码器的基础上加上三条限制，就可以得到简化的扩散模型：</p>
+<ol>
+<li>隐变量的维度和样本数据的维度一致</li>
+<li>放弃含参网络对解构手法的预测，<strong>统一采用“添加高斯噪声”的解构手法</strong>。$q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t-1}\right)=\mathcal{N}\left(\boldsymbol{x}_t ; \sqrt{\alpha_t} \boldsymbol{x}_{t-1},\left(1-\alpha_t\right) \mathbf{I}\right)$</li>
+<li>层级扩充到无穷之后，最后一层的数据将完全服从高斯分布$p\left(\boldsymbol{x}_T\right)=\mathcal{N}\left(\boldsymbol{x}_T ; \mathbf{0}, \mathbf{I}\right)$</li>
+</ol>
+<p>在这里，置信上界表征变成了：<br>$\log p(\boldsymbol{x}) \geq$  $\mathbb{E}_{q_\phi\left(\boldsymbol{x}_{1: T} \mid \boldsymbol{x}\right)}\left[\log \frac{p\left(\boldsymbol{x}, \boldsymbol{x}_{1: T}\right)}{q_{\boldsymbol{\phi}}\left(\boldsymbol{x}_{1: T} \mid \boldsymbol{x}\right)}\right]$=</p>
+<script type="math/tex; mode=display">\mathbb{E}_{q\left(\boldsymbol{x}_1 \mid \boldsymbol{x}_0\right)}\left[\log p_\theta\left(\boldsymbol{x}_0 \mid \boldsymbol{x}_1\right)\right]</script><script type="math/tex; mode=display">-\mathbb{E}_{q\left(\boldsymbol{x}_{T-1} \mid \boldsymbol{x}_0\right)}\left[D_{\mathrm{KL}}\left(q\left(\boldsymbol{x}_T \mid \boldsymbol{x}_{T-1}\right) \| p\left(\boldsymbol{x}_T\right)\right)\right]</script><script type="math/tex; mode=display">-\sum_{t=1}^{T-1} \mathbb{E}_{q\left(\boldsymbol{x}_{t-1}, \boldsymbol{x}_{t+1} \mid \boldsymbol{x}_0\right)}\left[D_{\mathrm{KL}}\left(q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t-1}\right) \| p_\theta\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+1}\right)\right)\right]</script><p>$\mathbb{E}_{q\left(\boldsymbol{x}_1 \mid \boldsymbol{x}_0\right)}\left[\log p_{\boldsymbol{\theta}}\left(\boldsymbol{x}_0 \mid \boldsymbol{x}_1\right)\right]$  - 从不含参网络$q(x_1 | x_0)$中采样得到$x_1$，然后利用含参网络估计$x_0$ ，可视作重构项<br>$\mathbb{E}_{q\left(\boldsymbol{x}_{T-1} \mid \boldsymbol{x}_0\right)}\left[D_{\mathrm{KL}}\left(q\left(\boldsymbol{x}_T \mid \boldsymbol{x}_{T-1}\right) | p\left(\boldsymbol{x}_T\right)\right)\right]$ - 已知初始样本$x_0$，从不含参数的网络$q(x_{T-1}|x_0)$中采样得到$x_{T-1}$，测算分布$q\left(\boldsymbol{x}_T \mid \boldsymbol{x}_{T-1}\right)$和分布$p\left(\boldsymbol{x}_T\right)$的相似度，相似度越高则说明$T$时刻，数据已经服从了噪声的分布，加不加噪音都一样了。<br>✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨</p>
+<script type="math/tex; mode=display">\mathbb{E}_{q\left(\boldsymbol{x}_{t-1}, \boldsymbol{x}_{t+1} \mid \boldsymbol{x}_0\right)}\left[D_{\mathrm{KL}}\left(q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t-1}\right) \| p_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+1}\right)\right)\right]</script><p>已知初始样本$x_0$，通过不含参数的网络$q(x_{t-1}, x_{t+1}|x_0)$采样得到$x_{t-1}$以及$x_{t+1}$，计算在某一个中间时刻，前向和后向过程的分布差异。<br>    正是由于这一项需要用蒙特卡洛估计法$q(x_{t-1}, x_{t+1}|x_0)$估计两个随机变量，蒙特卡洛法方法本身的缺陷导致这样的估计可能致使波动量过大，使得模型只能达到次优。<br>这时候就有了新的需求：<br><em>怎样避免蒙特卡洛估计法所造成的次优而转入最优？</em></p>
+<p>这个时候就可以利用下述变换：</p>
+<script type="math/tex; mode=display">q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t-1}, \boldsymbol{x}_0\right)=\frac{q\left(\boldsymbol{x}_{t-1} \mid \boldsymbol{x}_t, \boldsymbol{x}_0\right) q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)}{q\left(\boldsymbol{x}_{t-1} \mid \boldsymbol{x}_0\right)}</script><p>带入计算分布极大似然的公式中：<br>$\log p(\boldsymbol{x}) \geq$  $\mathbb{E}_{q_\phi\left(\boldsymbol{x}_{1: T} \mid \boldsymbol{x}\right)}\left[\log \frac{p\left(\boldsymbol{x}, \boldsymbol{x}_{1: T}\right)}{q_{\boldsymbol{\phi}}\left(\boldsymbol{x}_{1: T} \mid \boldsymbol{x}\right)}\right]$=</p>
+<script type="math/tex; mode=display">\mathbb{E}_{q\left(\boldsymbol{x}_1 \mid \boldsymbol{x}_0\right)}\left[\log p_\theta\left(\boldsymbol{x}_0 \mid \boldsymbol{x}_1\right)\right]</script><script type="math/tex; mode=display">-D_{\mathrm{KL}}\left(q\left(\boldsymbol{x}_T \mid \boldsymbol{x}_{0}\right) \| p\left(\boldsymbol{x}_T\right)\right)</script><script type="math/tex; mode=display">-\sum_{t=2}^T \mathbb{E}_{q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)}\left[D_{\mathrm{KL}}\left(q\left(\boldsymbol{x}_{t-1} \mid \boldsymbol{x}_t, \boldsymbol{x}_0\right) \| p_{\boldsymbol{\theta}}\left(\boldsymbol{x}_{t-1} \mid \boldsymbol{x}_t\right)\right)\right]</script><p>第三项改动较大，意味着已知$x_0$的情况下，利用无参模型$q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$采样得到$\boldsymbol{x}_t$。<br>后面的KL散度意味着：<br>    模型需要在某一个扩散时间点，并在<em>不知道初始样本</em>数据的情况下，对前一步数据的估计效果，要和<em>已知初始样本</em>后再对前一步数据估计的效果一样。<br>关于加噪的无参模型$q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$，表征的是正向加噪过程，(61-70)已证明其可以通过单步采样获得。于此同时（71-84）也证明，在已知$x_0$的情况下，单步降噪还原过程也正比于一个高斯分布，换句话说，<em>单步降噪也可以被视作在一个特定的高斯分布中采样</em>。接下来要解决的问题就是：<br><em>怎样优化上述的KL散度？</em></p>
+<p>经过(87-92)的步骤之后，得到了一个优化KL散度的一般形式，由此衍生了三种对降噪过程进行建模的流派：</p>
+<ol>
+<li>预测上一步的数据</li>
+<li>预测上一步添加的噪音(126-130)</li>
+<li>🌟预测上一步添加噪音后数据分布的运动向量（144-148）<br>关于第三种的能量模型是基于Tweedie方程而来。</li>
+</ol>
+]]></content>
+      <categories>
+        <category>Paper</category>
+      </categories>
+      <tags>
+        <tag>Diffusion</tag>
+        <tag>Generative Model</tag>
+      </tags>
+  </entry>
+</search>
