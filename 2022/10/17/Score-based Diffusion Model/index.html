@@ -20,16 +20,16 @@
     var CONFIG = {"hostname":"ayresephemeres.top","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
   </script>
 
-  <meta name="description" content="基于分数的的扩散模型，原文章：Score-Based Generative Modeling through Stochastic Differential Equations 直观理解将反向降噪过程中的降噪建模成一个粒子随机运动过程，然后用langevin方程描述这个粒子随机运动，并求出一个稳定解，得出降噪过程噪点运动的物理规律，从而引导噪声的分布向原数据分布的特征进行运动，从而达到生成数据的目">
+  <meta name="description" content="基于分数的的扩散模型，原文章：Score-Based Generative Modeling through Stochastic Differential Equations 一、直观理解将反向降噪过程中的降噪建模成一个粒子随机运动过程，然后用langevin方程描述这个粒子随机运动，并求出一个稳定解，得出降噪过程噪点运动的物理规律，从而引导噪声的分布向原数据分布的特征进行运动，从而达到生成数据">
 <meta property="og:type" content="article">
 <meta property="og:title" content="基于分数(score-based)的扩散(Diffusion)模型">
 <meta property="og:url" content="https://ayresephemeres.top/2022/10/17/Score-based%20Diffusion%20Model/index.html">
 <meta property="og:site_name" content="Dit moi, la petit ephémère">
-<meta property="og:description" content="基于分数的的扩散模型，原文章：Score-Based Generative Modeling through Stochastic Differential Equations 直观理解将反向降噪过程中的降噪建模成一个粒子随机运动过程，然后用langevin方程描述这个粒子随机运动，并求出一个稳定解，得出降噪过程噪点运动的物理规律，从而引导噪声的分布向原数据分布的特征进行运动，从而达到生成数据的目">
+<meta property="og:description" content="基于分数的的扩散模型，原文章：Score-Based Generative Modeling through Stochastic Differential Equations 一、直观理解将反向降噪过程中的降噪建模成一个粒子随机运动过程，然后用langevin方程描述这个粒子随机运动，并求出一个稳定解，得出降噪过程噪点运动的物理规律，从而引导噪声的分布向原数据分布的特征进行运动，从而达到生成数据">
 <meta property="og:locale" content="zh_CN">
 <meta property="og:image" content="https://ayresephemeres.top/images/score_based_diff/Pasted%20image%2020221128202716.png">
 <meta property="article:published_time" content="2022-10-17T05:39:46.166Z">
-<meta property="article:modified_time" content="2023-01-03T08:24:21.373Z">
+<meta property="article:modified_time" content="2023-01-03T08:59:41.106Z">
 <meta property="article:author" content="Ayres Guan">
 <meta property="article:tag" content="Diffusion">
 <meta property="article:tag" content="Generative Model">
@@ -186,7 +186,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">更新于</span>
-                <time title="修改时间：2023-01-03 16:24:21" itemprop="dateModified" datetime="2023-01-03T16:24:21+08:00">2023-01-03</time>
+                <time title="修改时间：2023-01-03 16:59:41" itemprop="dateModified" datetime="2023-01-03T16:59:41+08:00">2023-01-03</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -210,8 +210,8 @@
 
       
         <p>基于分数的的扩散模型，<br>原文章：<a target="_blank" rel="noopener" href="https://arxiv.org/abs/2011.13456">Score-Based Generative Modeling through Stochastic Differential Equations</a></p>
-<h1 id="直观理解"><a href="#直观理解" class="headerlink" title="直观理解"></a>直观理解</h1><p>将反向降噪过程中的降噪建模成一个<strong>粒子随机运动过程</strong>，然后用langevin方程描述这个粒子随机运动，并求出一个稳定解，得出降噪过程噪点运动的物理规律，从而引导噪声的分布向原数据分布的特征进行运动，从而达到生成数据的目的。<br><img src="/images/score_based_diff/Pasted image 20221128202716.png" alt="Overview of the Score-based Diffusion Model"></p>
-<h1 id="正向扩散过程"><a href="#正向扩散过程" class="headerlink" title="正向扩散过程"></a>正向扩散过程</h1><h2 id="随机微分方程建模（从离散到连续）"><a href="#随机微分方程建模（从离散到连续）" class="headerlink" title="随机微分方程建模（从离散到连续）"></a>随机微分方程建模（从离散到连续）</h2><p>思路依然是基于DDPM的分解方法，将噪音添加的过程分为 $T$ 步。只是DDPM中这个步数 $T$ 是人为设计的、<strong>离散的</strong>，按照直观的理解，这个噪音添加包括降噪的过程应该是连续的，为了消除这个人为的影响。</p>
+<h1 id="一、直观理解"><a href="#一、直观理解" class="headerlink" title="一、直观理解"></a>一、直观理解</h1><p>将反向降噪过程中的降噪建模成一个<strong>粒子随机运动过程</strong>，然后用langevin方程描述这个粒子随机运动，并求出一个稳定解，得出降噪过程噪点运动的物理规律，从而引导噪声的分布向原数据分布的特征进行运动，从而达到生成数据的目的。<br><img src="/images/score_based_diff/Pasted image 20221128202716.png" alt="Overview of the Score-based Diffusion Model"></p>
+<h1 id="二、正向扩散过程"><a href="#二、正向扩散过程" class="headerlink" title="二、正向扩散过程"></a>二、正向扩散过程</h1><h2 id="随机微分方程建模（从离散到连续）"><a href="#随机微分方程建模（从离散到连续）" class="headerlink" title="随机微分方程建模（从离散到连续）"></a>随机微分方程建模（从离散到连续）</h2><p>思路依然是基于DDPM的分解方法，将噪音添加的过程分为 $T$ 步。只是DDPM中这个步数 $T$ 是人为设计的、<strong>离散的</strong>，按照直观的理解，这个噪音添加包括降噪的过程应该是连续的，为了消除这个人为的影响。</p>
 <p>这里就用一个随机微分方程（SDE）进行建模，使得diffusion的正向、反向过程在时间维度上<strong>达到连续</strong>。</p>
 <p>每一次对数据进行噪声的添加，如此一次性的、离散的行为，用随机微分方程来表达可以写作：</p>
 <script type="math/tex; mode=display">
@@ -227,7 +227,7 @@ d \boldsymbol{x}=f_t(\boldsymbol{x}) d t+g_t d \boldsymbol{w}</script><p>在这�
 <li>在分析这个扩散过程的时候，可以利用连续的随机微分方程对其进行建模分析，使其理论上更可信。</li>
 <li>在代码实现的时候，可以参照第一个式子，选取合适的离散化方案，就可以对其进行数值计算。<br>整体上实现了将理论分析与程序实现分离的功能。</li>
 </ul>
-<h1 id="反向降噪过程"><a href="#反向降噪过程" class="headerlink" title="反向降噪过程"></a>反向降噪过程</h1><p>由于没有办法直接写出反向过程的表达式，所以这里倾向于先写出正向的概率公式，再利用贝叶斯公式得到降噪过程的表达式。</p>
+<h1 id="三、反向降噪过程"><a href="#三、反向降噪过程" class="headerlink" title="三、反向降噪过程"></a>三、反向降噪过程</h1><p>由于没有办法直接写出反向过程的表达式，所以这里倾向于先写出正向的概率公式，再利用贝叶斯公式得到降噪过程的表达式。</p>
 <p>对于一个极短的时间间隔 $\Delta t$ 内的<strong>正向</strong>过程，可以用条件概率公式表达为：</p>
 <script type="math/tex; mode=display">
 \begin{aligned}
@@ -255,7 +255,7 @@ p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_{t+\Delta t}\right) \propto \exp \le
 <p>再度取 $\Delta t \rightarrow 0$ ，利用SDE对其建模，可以得到：</p>
 <script type="math/tex; mode=display">
 d \boldsymbol{x}=\left[\boldsymbol{f}_t(\boldsymbol{x})-g_t^2 \nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})\right] d t+g_t d \boldsymbol{w}</script><p>这就是降噪过程的SDE。</p>
-<h2 id="分数匹配（Score-Matching）"><a href="#分数匹配（Score-Matching）" class="headerlink" title="分数匹配（Score Matching）"></a>分数匹配（Score Matching）</h2><h3 id="从连续出发，再次的离散化"><a href="#从连续出发，再次的离散化" class="headerlink" title="从连续出发，再次的离散化"></a>从连续出发，再次的离散化</h3><p>既然已经得到了逆向的SDE，<strong>只要再知道 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$（分数（score））</strong> 就可以将SDE再度离散化，实现一步一步离散化的去噪：</p>
+<h2 id="分数匹配（Score-Matching）"><a href="#分数匹配（Score-Matching）" class="headerlink" title="分数匹配（Score Matching）"></a>分数匹配（Score Matching）</h2><h3 id="1）从连续出发，再次的离散化"><a href="#1）从连续出发，再次的离散化" class="headerlink" title="1）从连续出发，再次的离散化"></a>1）从连续出发，再次的离散化</h3><p>既然已经得到了逆向的SDE，<strong>只要再知道 $\nabla_{\boldsymbol{x}} \log p_t(\boldsymbol{x})$（分数（score））</strong> 就可以将SDE再度离散化，实现一步一步离散化的去噪：</p>
 <script type="math/tex; mode=display">
 \boldsymbol{x}_t-\boldsymbol{x}_{t+\Delta t}=-\left[\boldsymbol{f}_{t+\Delta t}\left(\boldsymbol{x}_{t+\Delta t}\right)-g_{t+\Delta t}^2 \nabla_{\boldsymbol{x}_{t+\Delta t}} \log p\left(\boldsymbol{x}_{t+\Delta t}\right)\right] \Delta t+g_{t+\Delta t}^2 \sqrt{\Delta t} \boldsymbol{\varepsilon}, \quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{I})</script><p>描述的是 $\boldsymbol{x}_t$ 和 $\boldsymbol{x}_{t+\Delta t}$ 之间的差距，对比一下正向过程的：</p>
 <script type="math/tex; mode=display">
@@ -275,8 +275,7 @@ p\left(\boldsymbol{x}_t\right)=\int q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_
 <li>泛化能力不够<br>  只用到了训练样本</li>
 </ul>
 <p>为了改善这些缺点，也即加快计算速度、提高泛化能力，这里构建一个神经网络（分数网络）$s_\theta\left(x_t, t\right)$ 对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 进行估计。</p>
-<h3 id="分数匹配"><a href="#分数匹配" class="headerlink" title="分数匹配"></a>分数匹配</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">graph TD</span><br><span class="line">目标 -.- 分数网络</span><br><span class="line">分数网络 -.-|尽可能接近|score的数值</span><br><span class="line">分数网络 --&gt;|需要|优化目标</span><br><span class="line">优化目标 --&gt; 分数匹配</span><br></pre></td></tr></table></figure>
-<p>需要让 $s_\theta\left(x_t, t\right)$ 对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 的估计越准确越好，我们需要设计一个优化目标。<br>这个优化目标灵感来自对某一个样本数据的<strong>均值</strong>进行估计的目标：</p>
+<h3 id="2）分数匹配"><a href="#2）分数匹配" class="headerlink" title="2）分数匹配"></a>2）分数匹配</h3><p>需要让 $s_\theta\left(x_t, t\right)$ 对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 的估计越准确越好，我们需要设计一个优化目标。<br>这个优化目标灵感来自对某一个样本数据的<strong>均值</strong>进行估计的目标：</p>
 <script type="math/tex; mode=display">
 \mathbb{E}[\boldsymbol{x}]=\underset{\boldsymbol{\mu}}{\arg \min } \mathbb{E}_{\boldsymbol{x}}\left[\|\boldsymbol{\mu}-\boldsymbol{x}\|^2\right]</script><p>很容易可以知道，在最小化了 $|\boldsymbol{\mu}-\boldsymbol{x}|^2$ 的均值之后，此时的 $\mu$ 就无限接近于 $x$ 的均值。<br>同样的，对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t\right)$ 进行估计，根据上面的描述，等价于对 $\nabla_{\boldsymbol{x}_t} \log p\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)$ 的加权平均的估计，即估计：</p>
 <script type="math/tex; mode=display">
@@ -285,7 +284,7 @@ p\left(\boldsymbol{x}_t\right)=\int q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_
 \begin{aligned}
 & \int \mathbb{E}_{\boldsymbol{x}_0}\left[q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right] d \boldsymbol{x}_t \\
 =& \mathbb{E}_{\boldsymbol{x}_0, \boldsymbol{x}_t \sim q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right) \tilde{p}\left(\boldsymbol{x}_0\right)}\left[\left\|\boldsymbol{s}_{\boldsymbol{\theta}}\left(\boldsymbol{x}_t, t\right)-\nabla_{\boldsymbol{x}_t} \log q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)\right\|^2\right]
-\end{aligned}</script><h3 id="求解SDE"><a href="#求解SDE" class="headerlink" title="求解SDE"></a>求解SDE</h3><p>求解思路：对正向过程</p>
+\end{aligned}</script><h3 id="3）-求解SDE"><a href="#3）-求解SDE" class="headerlink" title="3） 求解SDE"></a>3） 求解SDE</h3><p>求解思路：对正向过程</p>
 <script type="math/tex; mode=display">
 q\left(\boldsymbol{x}_t \mid \boldsymbol{x}_0\right)=\mathcal{N}\left(\boldsymbol{x}_t ; \bar{\alpha}_t \boldsymbol{x}_0, \bar{\beta}_t^2 \boldsymbol{I}\right)</script><p>为使得噪音越加越多，得到从 $t=0$ 到 $t=1$ 过程的边界条件为：</p>
 <script type="math/tex; mode=display">
@@ -345,6 +344,16 @@ f_t=\frac{d}{d t}\left(\ln \bar{\alpha}_t\right)=\frac{1}{\bar{\alpha}_t} \frac{
 
 
         
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/10/17/Multiscale%20complexity%20fluctuation%20behaviours%20of%20stochastic%20interacting%20cryptocurrency%20price%20model/" rel="prev" title="基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model)">
+      <i class="fa fa-chevron-left"></i> 基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model)
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/10/28/Understanding%20Diffusion%20Models%20A%20Unified%20Perspective/" rel="next" title="用统一的连贯视角，解析扩散模型">
+      用统一的连贯视角，解析扩散模型 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
       </footer>
     
   </article>
@@ -402,7 +411,7 @@ f_t=\frac{d}{d t}\left(\ln \bar{\alpha}_t\right)=\frac{1}{\bar{\alpha}_t} \frac{
 
       <!--noindex-->
       <div class="post-toc-wrap sidebar-panel">
-          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%9B%B4%E8%A7%82%E7%90%86%E8%A7%A3"><span class="nav-number">1.</span> <span class="nav-text">直观理解</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%AD%A3%E5%90%91%E6%89%A9%E6%95%A3%E8%BF%87%E7%A8%8B"><span class="nav-number">2.</span> <span class="nav-text">正向扩散过程</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%9A%8F%E6%9C%BA%E5%BE%AE%E5%88%86%E6%96%B9%E7%A8%8B%E5%BB%BA%E6%A8%A1%EF%BC%88%E4%BB%8E%E7%A6%BB%E6%95%A3%E5%88%B0%E8%BF%9E%E7%BB%AD%EF%BC%89"><span class="nav-number">2.1.</span> <span class="nav-text">随机微分方程建模（从离散到连续）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A5%BD%E5%A4%84"><span class="nav-number">2.1.1.</span> <span class="nav-text">好处</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%8F%8D%E5%90%91%E9%99%8D%E5%99%AA%E8%BF%87%E7%A8%8B"><span class="nav-number">3.</span> <span class="nav-text">反向降噪过程</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%88%86%E6%95%B0%E5%8C%B9%E9%85%8D%EF%BC%88Score-Matching%EF%BC%89"><span class="nav-number">3.1.</span> <span class="nav-text">分数匹配（Score Matching）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%8E%E8%BF%9E%E7%BB%AD%E5%87%BA%E5%8F%91%EF%BC%8C%E5%86%8D%E6%AC%A1%E7%9A%84%E7%A6%BB%E6%95%A3%E5%8C%96"><span class="nav-number">3.1.1.</span> <span class="nav-text">从连续出发，再次的离散化</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%88%86%E6%95%B0%E5%8C%B9%E9%85%8D"><span class="nav-number">3.1.2.</span> <span class="nav-text">分数匹配</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B1%82%E8%A7%A3SDE"><span class="nav-number">3.1.3.</span> <span class="nav-text">求解SDE</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link"><span class="nav-number">4.</span> <span class="nav-text"> </span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Reference"><span class="nav-number">4.0.0.1.</span> <span class="nav-text">Reference</span></a></li></ol></li></ol></li></ol></li></ol></div>
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E7%9B%B4%E8%A7%82%E7%90%86%E8%A7%A3"><span class="nav-number">1.</span> <span class="nav-text">一、直观理解</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%BA%8C%E3%80%81%E6%AD%A3%E5%90%91%E6%89%A9%E6%95%A3%E8%BF%87%E7%A8%8B"><span class="nav-number">2.</span> <span class="nav-text">二、正向扩散过程</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%9A%8F%E6%9C%BA%E5%BE%AE%E5%88%86%E6%96%B9%E7%A8%8B%E5%BB%BA%E6%A8%A1%EF%BC%88%E4%BB%8E%E7%A6%BB%E6%95%A3%E5%88%B0%E8%BF%9E%E7%BB%AD%EF%BC%89"><span class="nav-number">2.1.</span> <span class="nav-text">随机微分方程建模（从离散到连续）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A5%BD%E5%A4%84"><span class="nav-number">2.1.1.</span> <span class="nav-text">好处</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%89%E3%80%81%E5%8F%8D%E5%90%91%E9%99%8D%E5%99%AA%E8%BF%87%E7%A8%8B"><span class="nav-number">3.</span> <span class="nav-text">三、反向降噪过程</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%88%86%E6%95%B0%E5%8C%B9%E9%85%8D%EF%BC%88Score-Matching%EF%BC%89"><span class="nav-number">3.1.</span> <span class="nav-text">分数匹配（Score Matching）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%EF%BC%89%E4%BB%8E%E8%BF%9E%E7%BB%AD%E5%87%BA%E5%8F%91%EF%BC%8C%E5%86%8D%E6%AC%A1%E7%9A%84%E7%A6%BB%E6%95%A3%E5%8C%96"><span class="nav-number">3.1.1.</span> <span class="nav-text">1）从连续出发，再次的离散化</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%EF%BC%89%E5%88%86%E6%95%B0%E5%8C%B9%E9%85%8D"><span class="nav-number">3.1.2.</span> <span class="nav-text">2）分数匹配</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%EF%BC%89-%E6%B1%82%E8%A7%A3SDE"><span class="nav-number">3.1.3.</span> <span class="nav-text">3） 求解SDE</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link"><span class="nav-number">4.</span> <span class="nav-text"> </span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Reference"><span class="nav-number">4.0.0.1.</span> <span class="nav-text">Reference</span></a></li></ol></li></ol></li></ol></li></ol></div>
       </div>
       <!--/noindex-->
 
@@ -418,16 +427,16 @@ f_t=\frac{d}{d t}\left(\ln \bar{\alpha}_t\right)=\frac{1}{\bar{\alpha}_t} \frac{
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">1</span>
+          <span class="site-state-item-count">5</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
       <div class="site-state-item site-state-categories">
-        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-count">2</span>
         <span class="site-state-item-name">分类</span>
       </div>
       <div class="site-state-item site-state-tags">
-        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-count">9</span>
         <span class="site-state-item-name">标签</span>
       </div>
   </nav>

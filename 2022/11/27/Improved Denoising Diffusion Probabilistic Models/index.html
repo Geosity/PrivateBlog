@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 6.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+  <link rel="mask-icon" href="/images/favicon.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"ayresephemeres.top","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="对DDPM进行改进原文：戳我作者：Alex Nichol, Prafulla Dhariwal Improvement1- 对数似然估计“Razavi, A., van den Oord, A., and Vinyals, O. Generating diverse high-fidelity images with vq-vae-2, 2019.” —— 对对数似然进行估计的优化过程，可以迫使生">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Improved DDPM">
+<meta property="og:url" content="https://ayresephemeres.top/2022/11/27/Improved%20Denoising%20Diffusion%20Probabilistic%20Models/index.html">
+<meta property="og:site_name" content="Dit moi, la petit ephémère">
+<meta property="og:description" content="对DDPM进行改进原文：戳我作者：Alex Nichol, Prafulla Dhariwal Improvement1- 对数似然估计“Razavi, A., van den Oord, A., and Vinyals, O. Generating diverse high-fidelity images with vq-vae-2, 2019.” —— 对对数似然进行估计的优化过程，可以迫使生">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ayresephemeres.top/images/iddpm/Pasted%20image%2020221127124438.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/iddpm/Pasted%20image%2020221127125740.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/iddpm/Pasted%20image%2020221127131446.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/iddpm/Pasted%20image%2020221127131521.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/iddpm/Pasted%20image%2020221127131849.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/iddpm/Pasted%20image%2020221127135032.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/iddpm/Pasted%20image%2020221127133001.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/iddpm/Pasted%20image%2020221127133209.png">
+<meta property="article:published_time" content="2022-11-27T01:55:57.028Z">
+<meta property="article:modified_time" content="2023-01-04T15:53:10.012Z">
+<meta property="article:author" content="Ayres Guan">
+<meta property="article:tag" content="Diffusion">
+<meta property="article:tag" content="Generative Model">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ayresephemeres.top/images/iddpm/Pasted%20image%2020221127124438.png">
+
+<link rel="canonical" href="https://ayresephemeres.top/2022/11/27/Improved%20Denoising%20Diffusion%20Probabilistic%20Models/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Improved DDPM | Dit moi, la petit ephémère</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Dit moi, la petit ephémère</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">Qui nous laisse espérer le ciel, et nous attache à des pierres</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://ayresephemeres.top/2022/11/27/Improved%20Denoising%20Diffusion%20Probabilistic%20Models/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.png">
+      <meta itemprop="name" content="Ayres Guan">
+      <meta itemprop="description" content="文理齐蓄，兼容并包。">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Dit moi, la petit ephémère">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Improved DDPM
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-11-27 09:55:57" itemprop="dateCreated datePublished" datetime="2022-11-27T09:55:57+08:00">2022-11-27</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-01-04 23:53:10" itemprop="dateModified" datetime="2023-01-04T23:53:10+08:00">2023-01-04</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Paper/" itemprop="url" rel="index"><span itemprop="name">Paper</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>对DDPM进行改进<br>原文：<a target="_blank" rel="noopener" href="http://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf">戳我</a><br>作者：Alex Nichol, Prafulla Dhariwal</p>
+<h1 id="Improvement"><a href="#Improvement" class="headerlink" title="Improvement"></a>Improvement</h1><h2 id="1-对数似然估计"><a href="#1-对数似然估计" class="headerlink" title="1- 对数似然估计"></a>1- 对数似然估计</h2><p>“Razavi, A., van den Oord, A., and Vinyals, O. Generating diverse high-fidelity images with vq-vae-2, 2019.” —— 对对数似然进行估计的优化过程，可以迫使生成模型获取原始数据所有的特征分布。</p>
+<p>“Henighan, T., Kaplan, J., Katz, M., Chen, M., Hesse, C., Jackson, J., Jun, H., Brown, T. B., Dhariwal, P., Gray, S., Hallacy, C., Mann, B., Radford, A., Ramesh, A., Ryder,N., Ziegler, D. M., Schulman, J., Amodei, D., and McCandlish, S. Scaling laws for autoregressive generative modeling, 2020.” —— 在对对数似然上进行微小的提升就可以大幅度提高采样的质量。</p>
+<p>因此：很有必要思考怎样让DDPM在对对数似然的优化更进一步。<br>前期的实验结果发现，把扩散步数$T$增加可以有效提高对数似然的效果。<br>    $T$从1000提高到4000，对数似然提高到3.77</p>
+<h3 id="1-1-对协方差进行预测"><a href="#1-1-对协方差进行预测" class="headerlink" title="1.1- 对协方差进行预测"></a>1.1- 对协方差进行预测</h3><p>DDPM降噪采样时的方差是固定的，固定为：$\Sigma_\theta\left(x_t, t\right)=\sigma_t^2 I$，并且固定$\sigma_t = \beta_t$<br><img src="/images/iddpm/Pasted image 20221127124438.png" alt=""><br>但是很奇怪的是，在降噪的采样实验中，不论是让$\sigma_t = \beta_t$还是让$\sigma_t = \tilde{\beta}_t$，采样的质量差不多。难道是方差其实根本不是决定采样质量的变量？<br>    补充：$\tilde{\beta}_t:=\frac{1-\bar{\alpha}_{t-1}}{1-\bar{\alpha}_t} \beta_t$，$\bar{\alpha}_t:=\prod_{s=0}^t \alpha_s$，$\alpha_t:=1-\beta_t$<br>为了验证这个猜想作者绘制了上图，并发现在扩散进度$t=0$的位置，$\beta_t$和$\tilde{\beta}_t$几乎一致。这说明在有限的扩散步数之内，方差$\sigma_t$不一定和采样质量之间存在关联。</p>
+<p>换句话说就是，我们在添加更多的扩散步数之后，<em>采样质量的高低更多的还是与降噪采样的均值相关</em>。</p>
+<p>同时该图也表明<strong>协方差的合理范围（$\beta$ ~ $\tilde{\beta}$ ）是很小的</strong>，如果利用神经网络直接对其进行预测的话，需要这个神经网络达到相当高程度的精度，这对现有的神经网络来说还是不太好实现的。</p>
+<p>所以说可以转换一个思路，让神经网络去预测一个参数，让参数规划出来的数值落在$\beta$ ~ $\tilde{\beta}$ 之间，这样神经网络就可以更好训练了。</p>
+<script type="math/tex; mode=display">
+\Sigma_\theta\left(x_t, t\right)=\exp \left(v \log \beta_t+(1-v) \log \tilde{\beta}_t\right)</script><p>并且在对$v$进行预测的过程中，作者并没有为其增加什么约束，理论上这可能让最后的协方差超过预期的范围，不过实践中这种情况这并没有发生过，可以假定应该是这个神经网络的定义方式本身已经对其数值的上下界有了一定的约束。</p>
+<p><img src="/images/iddpm/Pasted image 20221127125740.png" alt=""><br>不过与此同时，上图的实验也证明，在扩散过程的前几步对最小化变分下界(Variational Lower BOund)而言是效用最高的。因此我们仍然可以说，协方差的选择是和训练效果、采样效果相关的。</p>
+<p>基于上述两个特殊的实验，在重新把协方差纳入考量之后，为了最大化利用协方差和效果的相关性，训练的优化目标也进一步发生改变：</p>
+<script type="math/tex; mode=display">
+L_{\text {hybrid }}=L_{\text {simple }}+\lambda L_{\mathrm{vlb}}</script><p>这里$\lambda=1e-3$</p>
+<h3 id="1-2-对噪声数据更好地进行规划"><a href="#1-2-对噪声数据更好地进行规划" class="headerlink" title="1.2- 对噪声数据更好地进行规划"></a>1.2- 对噪声数据更好地进行规划</h3><p><img src="/images/iddpm/Pasted image 20221127131446.png" alt=""><br>在DDPM中，数值从小到大，噪声的规划是线性的，但是作者发现，这种线性递增的噪音其实很有可能扩散到一半的时候，就让数据完全服从高斯分布了（上），再后面的噪声添加已经对采样、对训练没有任何意义。</p>
+<p><img src="/images/iddpm/Pasted image 20221127131521.png" alt=""><br><img src="/images/iddpm/Pasted image 20221127131849.png" alt=""><br>所以作者提出了cos噪声规划方法，使得噪声添加的量呈非线性，同时在cos噪声规划的情况下$\bar{\alpha}_t$的变化更为线性而平缓，可以有效防止数据在中途某一步突然被添加大量噪声，因此降低神经网络的训练难度，理论上一定程度提高了训练效果。</p>
+<h4 id="Cosine噪声规划"><a href="#Cosine噪声规划" class="headerlink" title="Cosine噪声规划"></a>Cosine噪声规划</h4><p>公式：</p>
+<script type="math/tex; mode=display">
+\bar{\alpha}_t=\frac{f(t)}{f(0)}, \quad f(t)=\cos \left(\frac{t / T+s}{1+s} \cdot \frac{\pi}{2}\right)^2</script><p>这种规划方法利用$s$替换了原本DDPM的噪声参数$\beta$，防止其在靠近$t=0$的时候过小，这也是因为作者团队在上述研究的发现：<br>在刚开始扩散的时候效果其实是最好的，这个时候如果噪声数量过少，不利于神经网络对噪声$\epsilon$的预测。</p>
+<p>$s=8e-3$<br>作者团队选择$\cos^2(\cdot)$的形式是因为这个函数的形状是符合作者团队对噪声规划的预期的，同时这也是一个数学中常见的函数。当然这里也可以选择其他的函数，具体什么函数更好就看后人的工作了。<br><img src="/images/iddpm/Pasted image 20221127135032.png" alt=""></p>
+<h3 id="1-3-降低梯度数据中的噪声"><a href="#1-3-降低梯度数据中的噪声" class="headerlink" title="1.3- 降低梯度数据中的噪声"></a>1.3- 降低梯度数据中的噪声</h3><p><img src="/images/iddpm/Pasted image 20221127133001.png" alt=""><br>在1.1中，对目标引入了$L_{vlb}$，但是作者也发现关于这个目标的优化实在是有点困难。上图表明$L_{hybrid}$的效果好于$L_{vlb}$，作者基于此假设：<br>$L_{vlb}$在训练时的梯度相比于$L_{hybrid}$而言，噪声更多。</p>
+<p><img src="/images/iddpm/Pasted image 20221127133209.png" alt=""><br>“McCandlish, S., Kaplan, J., Amodei, D., and Team, O. D. An empirical model of large-batch training, 2018.” —— 一个评估梯度噪声规模(Gradient Noise Scales)的方法</p>
+<p>基于这个方法，作者团队证明了自己的猜想，并为了消除这些噪声的影响，作者进一步提出假设：<br>是因为在预测时，对扩散时间点$t$的采样，是在$[0, T]$之间的均匀采样而导致的噪声，换一种对$t$的采样方法或许可以解决这个问题。</p>
+<p>于是作者引入了<strong>重要性采样(Importance Sampling)</strong>：</p>
+<script type="math/tex; mode=display">
+L_{\mathrm{vlb}}=E_{t \sim p_t}\left[\frac{L_t}{p_t}\right], \text { where } p_t \propto \sqrt{E\left[L_t^2\right]} \text { and } \sum p_t=1</script><p>其中：$E\left[L_t^2\right]$这个关于损失（时间）平方的函数的期望值是未知的，而且很有可能在训练过程中，因为损失值的变化而实时变动。作者保留了损失项的前(previous)10个数值，并且在训练过程中实时更新这个小列表。<br>训练一开始的前10步还是采用均匀采样，一旦损失项的数值个数超过10，则启用重要性采样。</p>
+<h2 id="2-采样速度"><a href="#2-采样速度" class="headerlink" title="2- 采样速度"></a>2- 采样速度</h2><p>直观上来说，经过了$T$步扩散的数据应该同样地该序列将其还原。不过作者认为，利用一个关于0~$T$的子序列$S$进行对其进行降噪采样也是可行的。</p>
+<p>基于子序列$S$，得到对应的噪声系数$\bar{\alpha}_{S_t}$，这个时候采样就变成了：</p>
+<script type="math/tex; mode=display">
+\beta_{S_t}=1-\frac{\bar{\alpha}_{S_t}}{\bar{\alpha}_{S_{t-1}}}, \quad \tilde{\beta}_{S_t}=\frac{1-\bar{\alpha}_{S_{t-1}}}{1-\bar{\alpha}_{S_t}} \beta_{S_t}</script><p>此时用于预测的含参概率模型就是：$$<br>p\left(x_{S_{t-1}} \mid x_{S_t}\right) =\mathcal{N}\left(\mu_\theta\left(x_{S_t}, S_t\right), \Sigma_\theta\left(x_{S_t}, S_t\right)\right)</p>
+<p>$$</p>
+<h1 id="观点"><a href="#观点" class="headerlink" title="观点"></a>观点</h1><h2 id="1-和GAN对比"><a href="#1-和GAN对比" class="headerlink" title="1- 和GAN对比"></a>1- 和GAN对比</h2><p>GAN一般是用来训练给定分类条件的生成模型(class-conditional models)，</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Diffusion/" rel="tag"># Diffusion</a>
+              <a href="/tags/Generative-Model/" rel="tag"># Generative Model</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/10/28/Understanding%20Diffusion%20Models%20A%20Unified%20Perspective/" rel="prev" title="用统一的连贯视角，解析扩散模型">
+      <i class="fa fa-chevron-left"></i> 用统一的连贯视角，解析扩散模型
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2023/01/02/TS2Vec%20Towards%20Universal%20Representation%20of%20Time%20Series/" rel="next" title="TS2Vec：一种更普适的时序数据表征方式">
+      TS2Vec：一种更普适的时序数据表征方式 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Improvement"><span class="nav-number">1.</span> <span class="nav-text">Improvement</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-%E5%AF%B9%E6%95%B0%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1"><span class="nav-number">1.1.</span> <span class="nav-text">1- 对数似然估计</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-1-%E5%AF%B9%E5%8D%8F%E6%96%B9%E5%B7%AE%E8%BF%9B%E8%A1%8C%E9%A2%84%E6%B5%8B"><span class="nav-number">1.1.1.</span> <span class="nav-text">1.1- 对协方差进行预测</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#1-2-%E5%AF%B9%E5%99%AA%E5%A3%B0%E6%95%B0%E6%8D%AE%E6%9B%B4%E5%A5%BD%E5%9C%B0%E8%BF%9B%E8%A1%8C%E8%A7%84%E5%88%92"><span class="nav-number">1.1.2.</span> <span class="nav-text">1.2- 对噪声数据更好地进行规划</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Cosine%E5%99%AA%E5%A3%B0%E8%A7%84%E5%88%92"><span class="nav-number">1.1.2.1.</span> <span class="nav-text">Cosine噪声规划</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#1-3-%E9%99%8D%E4%BD%8E%E6%A2%AF%E5%BA%A6%E6%95%B0%E6%8D%AE%E4%B8%AD%E7%9A%84%E5%99%AA%E5%A3%B0"><span class="nav-number">1.1.3.</span> <span class="nav-text">1.3- 降低梯度数据中的噪声</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-%E9%87%87%E6%A0%B7%E9%80%9F%E5%BA%A6"><span class="nav-number">1.2.</span> <span class="nav-text">2- 采样速度</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E8%A7%82%E7%82%B9"><span class="nav-number">2.</span> <span class="nav-text">观点</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-%E5%92%8CGAN%E5%AF%B9%E6%AF%94"><span class="nav-number">2.1.</span> <span class="nav-text">1- 和GAN对比</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Ayres Guan"
+      src="/images/avatar.png">
+  <p class="site-author-name" itemprop="name">Ayres Guan</p>
+  <div class="site-description" itemprop="description">文理齐蓄，兼容并包。</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">5</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Geosity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Geosity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:geositty@gmail.com" title="E-Mail → mailto:geositty@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://www.instagram.com/ayresguan.st/" title="Instagram → https:&#x2F;&#x2F;www.instagram.com&#x2F;ayresguan.st&#x2F;" rel="noopener" target="_blank"><i class="fab fa-instagram fa-fw"></i></a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Ayres Guan</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+      
+
+<script>
+  if (typeof MathJax === 'undefined') {
+    window.MathJax = {
+      loader: {
+        source: {
+          '[tex]/amsCd': '[tex]/amscd',
+          '[tex]/AMScd': '[tex]/amscd'
+        }
+      },
+      tex: {
+        inlineMath: {'[+]': [['$', '$']]},
+        tags: 'ams'
+      },
+      options: {
+        renderActions: {
+          findScript: [10, doc => {
+            document.querySelectorAll('script[type^="math/tex"]').forEach(node => {
+              const display = !!node.type.match(/; *mode=display/);
+              const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display);
+              const text = document.createTextNode('');
+              node.parentNode.replaceChild(text, node);
+              math.start = {node: text, delim: '', n: 0};
+              math.end = {node: text, delim: '', n: 0};
+              doc.math.push(math);
+            });
+          }, '', false],
+          insertedScript: [200, () => {
+            document.querySelectorAll('mjx-container').forEach(node => {
+              let target = node.parentNode;
+              if (target.nodeName.toLowerCase() === 'li') {
+                target.parentNode.classList.add('has-jax');
+              }
+            });
+          }, '', false]
+        }
+      }
+    };
+    (function () {
+      var script = document.createElement('script');
+      script.src = '//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+      script.defer = true;
+      document.head.appendChild(script);
+    })();
+  } else {
+    MathJax.startup.document.state(0);
+    MathJax.texReset();
+    MathJax.typeset();
+  }
+</script>
+
+    
+
+  
+
+</body>
+</html>

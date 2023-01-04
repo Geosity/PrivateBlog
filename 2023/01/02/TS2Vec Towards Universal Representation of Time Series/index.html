@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 6.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+  <link rel="mask-icon" href="/images/favicon.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"ayresephemeres.top","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="作者：Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu原文：戳我代码：戳戳我 一、核心看点 利用一种多层对比学习的方法，为时序数据中每一个时间点提供一个更为好用的上下文表征方法。 通过在时间点上执行一个简洁的数据聚合方法，使得在时序数据中的任意一个子序列都可以被">
+<meta property="og:type" content="article">
+<meta property="og:title" content="TS2Vec：一种更普适的时序数据表征方式">
+<meta property="og:url" content="https://ayresephemeres.top/2023/01/02/TS2Vec%20Towards%20Universal%20Representation%20of%20Time%20Series/index.html">
+<meta property="og:site_name" content="Dit moi, la petit ephémère">
+<meta property="og:description" content="作者：Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu原文：戳我代码：戳戳我 一、核心看点 利用一种多层对比学习的方法，为时序数据中每一个时间点提供一个更为好用的上下文表征方法。 通过在时间点上执行一个简洁的数据聚合方法，使得在时序数据中的任意一个子序列都可以被">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ayresephemeres.top/images/ts2vec/Pasted%20image%2020230104155411.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/ts2vec/Pasted%20image%2020230104170806.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/ts2vec/Pasted%20image%2020230104220210.png">
+<meta property="article:published_time" content="2023-01-02T03:53:21.095Z">
+<meta property="article:modified_time" content="2023-01-04T16:02:07.950Z">
+<meta property="article:author" content="Ayres Guan">
+<meta property="article:tag" content="CNN">
+<meta property="article:tag" content="Representation Learning">
+<meta property="article:tag" content="Time Series">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ayresephemeres.top/images/ts2vec/Pasted%20image%2020230104155411.png">
+
+<link rel="canonical" href="https://ayresephemeres.top/2023/01/02/TS2Vec%20Towards%20Universal%20Representation%20of%20Time%20Series/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>TS2Vec：一种更普适的时序数据表征方式 | Dit moi, la petit ephémère</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Dit moi, la petit ephémère</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">Qui nous laisse espérer le ciel, et nous attache à des pierres</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://ayresephemeres.top/2023/01/02/TS2Vec%20Towards%20Universal%20Representation%20of%20Time%20Series/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.png">
+      <meta itemprop="name" content="Ayres Guan">
+      <meta itemprop="description" content="文理齐蓄，兼容并包。">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Dit moi, la petit ephémère">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          TS2Vec：一种更普适的时序数据表征方式
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2023-01-02 11:53:21" itemprop="dateCreated datePublished" datetime="2023-01-02T11:53:21+08:00">2023-01-02</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-01-05 00:02:07" itemprop="dateModified" datetime="2023-01-05T00:02:07+08:00">2023-01-05</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Paper/" itemprop="url" rel="index"><span itemprop="name">Paper</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>作者：Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu<br>原文：<a target="_blank" rel="noopener" href="https://arxiv.org/abs/2106.10466">戳我</a><br>代码：<a target="_blank" rel="noopener" href="https://github.com/yuezhihan/ts2vec">戳戳我</a></p>
+<h1 id="一、核心看点"><a href="#一、核心看点" class="headerlink" title="一、核心看点"></a>一、核心看点</h1><ul>
+<li>利用一种<strong>多层对比学习</strong>的方法，为时序数据中每一个时间点提供一个更为好用的上下文表征方法。</li>
+<li>通过在时间点上执行一个简洁的数据聚合方法，使得在时序数据中的<strong>任意一个子序列</strong>都可以被表征。</li>
+</ul>
+<h1 id="二、研究动机"><a href="#二、研究动机" class="headerlink" title="二、研究动机"></a>二、研究动机</h1><ul>
+<li>实例层级（Instance-level）的表征方法可能没有办法很好注入时序预测、异常检测之类的适配细粒度（fine-grained）的任务。</li>
+<li>针对现有各种的表征方法中，在表征某一个时间点的上下文(contextual)信息时，上下文的覆盖范围不够灵活，窗口大小相对固定。<ul>
+<li>多尺度的表征方法可以提高其泛化性，使其对更多的下游任务都能适配。</li>
+</ul>
+</li>
+<li>目前针对时序数据的无监督式表征学习方法，大部分都是从cv或者nlp领域照搬过来的。</li>
+</ul>
+<h1 id="三、问题建模"><a href="#三、问题建模" class="headerlink" title="三、问题建模"></a>三、问题建模</h1><p>对包含 $N$ 个实例的时序数据 $\mathcal{X}=\left\{x_1, x_2, \cdots, x_N\right\}, x_i \in \mathbb{R}^{T \times F}$ ( $T$ 表示的是序列长度， $F$ 表示的是特征维度)，构建一个非线性的嵌入(embedding)映射，将每一个 $x_i$ 映射成对应的表征量 $r_i$ 。<br>针对第i个实例 $x_i$ ，经过嵌入映射后得到的其表征向量写作$r_i=\left\{r_{i, 1}, r_{i, 2}, \cdots, r_{i, T}\right\}, r_{i, t} \in \mathbb{R}^K$，此处 $K$ 表示的是用户自定义的嵌入维度。</p>
+<h1 id="四、模型概览"><a href="#四、模型概览" class="headerlink" title="四、模型概览"></a>四、模型概览</h1><p><img src="/images/ts2vec/Pasted image 20230104155411.png" alt=""></p>
+<ol>
+<li>针对第 $i$ 个实例 $x_i$， 从里面随机选取<strong>一对</strong>在时间维度上相交的子序列（ $a_1$ , $b_1$）和 ( $a_2$, $b_2$ )<br> 两序列在( $a_2$ , $b_1$ )段重合<br> $0&lt;a_1 \leq a_2 \leq b_1 \leq b_2 \leq T$<br> 两个子序列相交的原因：方便检验该方法在两个子序列上，其相交部分的上下文表征具备一致性。</li>
+<li>这两段子序列都会被输入一个编码器（<em>encoder</em>）。<br> 该编码器利用 <strong>contrastive loss</strong> 和 <strong>instance-wise contrastive loss</strong> 进行共同训练。<br> 编码器分为三层：<ol>
+<li>输入映射层( <em>Input Projection Layer</em>)<br> 将 $x_{i, t}$ 映射为隐变量 $z_{i, t}$ ，后者的维度将高于前者<br> 模型：全连接层</li>
+<li>时间点掩码层( <em>Timestamp Masking</em> )<br> 对隐变量$z_{i, t}$ ，随机选取时间点进行遮掩。下图打问号的部分就是被掩码遮蔽的区域。<br> 对于一对子序列，这段操作就是在它们的相交部分，选择一段时间的数据进行单向、双向的遮蔽，并检查这两段子序列的嵌入向量，在这个遮掩区域的表征是否一致。<br> 数学表达： $m \in\{0,1\}^T$<br> 选取方法：在 $p=0.5$ 的伯努利分布上采样<br> <img src="/images/ts2vec/Pasted image 20230104170806.png" alt=""></li>
+<li>扩张卷积层 ( <em>Dilated Convolution</em> )<br> 对每个时间点抽取其上下文特征<br> 模型：10个res blocks，每一个res block包含两个1D卷积层</li>
+</ol>
+</li>
+<li><p>进行多层级的对比( <em>Hierarchical Contrasting</em> )<br> 对于同一个实例 $x_i$， 在时间点 $t$ 上，选取用于表征它的、数值不同的两个嵌入向量 $r_{i, t}$ 与 $r^\prime_{i, t}$ 。<br> 计算其<strong>时间维度</strong>上的表征差异：</p>
+<script type="math/tex; mode=display">
+\ell_{t e m p}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{t^{\prime} \in \Omega}\left(\exp \left(r_{i, t} \cdot r_{i, t^{\prime}}^{\prime}\right)+\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)\right)}</script><p> 其中：$\Omega$ 表征的是这对子序列相交的那一部分数据对应的时间段。<br> $\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)$ 表示当 $t \neq t^{\prime}$ 时，才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 再计算<strong>整体</strong>上二者的表征差异：</p>
+<script type="math/tex; mode=display">
+\ell_{i n s t}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{j=1}^B\left(\exp \left(r_{i, t} \cdot r_{j, t}^{\prime}\right)+\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)\right)}</script><p> 其中： $B$ 表征的是一个训练批次的大小（batch size）。<br> $\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)$ 表示当 $i \neq j$ 的时候才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 将这两者聚合：</p>
+<script type="math/tex; mode=display">
+\mathcal{L}_{d u a l}(r_{i, t} , r^\prime_{i, t})=\frac{1}{N T} \sum_i \sum_t\left(\ell_{t e m p}^{(i, t)}+\ell_{i n s t}^{(i, t)}\right)</script><p> 再利用maxpooling技术，不断压缩这对子序列数据，再在压缩了的数据上执行对比计算，直到子序列的长度被压缩为1.<br><img src="/images/ts2vec/Pasted image 20230104220210.png" alt=""></p>
+</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/CNN/" rel="tag"># CNN</a>
+              <a href="/tags/Representation-Learning/" rel="tag"># Representation Learning</a>
+              <a href="/tags/Time-Series/" rel="tag"># Time Series</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/11/27/Improved%20Denoising%20Diffusion%20Probabilistic%20Models/" rel="prev" title="Improved DDPM">
+      <i class="fa fa-chevron-left"></i> Improved DDPM
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E6%A0%B8%E5%BF%83%E7%9C%8B%E7%82%B9"><span class="nav-number">1.</span> <span class="nav-text">一、核心看点</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%BA%8C%E3%80%81%E7%A0%94%E7%A9%B6%E5%8A%A8%E6%9C%BA"><span class="nav-number">2.</span> <span class="nav-text">二、研究动机</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%89%E3%80%81%E9%97%AE%E9%A2%98%E5%BB%BA%E6%A8%A1"><span class="nav-number">3.</span> <span class="nav-text">三、问题建模</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%9B%9B%E3%80%81%E6%A8%A1%E5%9E%8B%E6%A6%82%E8%A7%88"><span class="nav-number">4.</span> <span class="nav-text">四、模型概览</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Ayres Guan"
+      src="/images/avatar.png">
+  <p class="site-author-name" itemprop="name">Ayres Guan</p>
+  <div class="site-description" itemprop="description">文理齐蓄，兼容并包。</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">5</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Geosity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Geosity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:geositty@gmail.com" title="E-Mail → mailto:geositty@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://www.instagram.com/ayresguan.st/" title="Instagram → https:&#x2F;&#x2F;www.instagram.com&#x2F;ayresguan.st&#x2F;" rel="noopener" target="_blank"><i class="fab fa-instagram fa-fw"></i></a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Ayres Guan</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+      
+
+<script>
+  if (typeof MathJax === 'undefined') {
+    window.MathJax = {
+      loader: {
+        source: {
+          '[tex]/amsCd': '[tex]/amscd',
+          '[tex]/AMScd': '[tex]/amscd'
+        }
+      },
+      tex: {
+        inlineMath: {'[+]': [['$', '$']]},
+        tags: 'ams'
+      },
+      options: {
+        renderActions: {
+          findScript: [10, doc => {
+            document.querySelectorAll('script[type^="math/tex"]').forEach(node => {
+              const display = !!node.type.match(/; *mode=display/);
+              const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display);
+              const text = document.createTextNode('');
+              node.parentNode.replaceChild(text, node);
+              math.start = {node: text, delim: '', n: 0};
+              math.end = {node: text, delim: '', n: 0};
+              doc.math.push(math);
+            });
+          }, '', false],
+          insertedScript: [200, () => {
+            document.querySelectorAll('mjx-container').forEach(node => {
+              let target = node.parentNode;
+              if (target.nodeName.toLowerCase() === 'li') {
+                target.parentNode.classList.add('has-jax');
+              }
+            });
+          }, '', false]
+        }
+      }
+    };
+    (function () {
+      var script = document.createElement('script');
+      script.src = '//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+      script.defer = true;
+      document.head.appendChild(script);
+    })();
+  } else {
+    MathJax.startup.document.state(0);
+    MathJax.texReset();
+    MathJax.typeset();
+  }
+</script>
+
+    
+
+  
+
+</body>
+</html>

@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 6.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+  <link rel="mask-icon" href="/images/favicon.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"ayresephemeres.top","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="【随机接触模型】建模的【加密货币价格模型】中的【多尺度】【复杂】【波动】【行为】作者：Zhiyong Zheng, Yunfan Lu, Junhuan Zhang文章：Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model 问题背景加密货币市场的波动已经开始">
+<meta property="og:type" content="article">
+<meta property="og:title" content="基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model)">
+<meta property="og:url" content="https://ayresephemeres.top/2022/10/17/Multiscale%20complexity%20fluctuation%20behaviours%20of%20stochastic%20interacting%20cryptocurrency%20price%20model/index.html">
+<meta property="og:site_name" content="Dit moi, la petit ephémère">
+<meta property="og:description" content="【随机接触模型】建模的【加密货币价格模型】中的【多尺度】【复杂】【波动】【行为】作者：Zhiyong Zheng, Yunfan Lu, Junhuan Zhang文章：Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model 问题背景加密货币市场的波动已经开始">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ayresephemeres.top/images/multi_scale_crypto/Pasted%20image%2020221022130343.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/multi_scale_crypto/Pasted%20image%2020221022131758.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/multi_scale_crypto/Pasted%20image%2020221022133258.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/multi_scale_crypto/Pasted%20image%2020221022142116.png">
+<meta property="article:published_time" content="2022-10-17T00:22:22.431Z">
+<meta property="article:modified_time" content="2023-01-04T15:45:26.532Z">
+<meta property="article:author" content="Ayres Guan">
+<meta property="article:tag" content="Stochastic Process">
+<meta property="article:tag" content="Cryptocurrency market">
+<meta property="article:tag" content="Multi-agent System">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ayresephemeres.top/images/multi_scale_crypto/Pasted%20image%2020221022130343.png">
+
+<link rel="canonical" href="https://ayresephemeres.top/2022/10/17/Multiscale%20complexity%20fluctuation%20behaviours%20of%20stochastic%20interacting%20cryptocurrency%20price%20model/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model) | Dit moi, la petit ephémère</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Dit moi, la petit ephémère</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">Qui nous laisse espérer le ciel, et nous attache à des pierres</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://ayresephemeres.top/2022/10/17/Multiscale%20complexity%20fluctuation%20behaviours%20of%20stochastic%20interacting%20cryptocurrency%20price%20model/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.png">
+      <meta itemprop="name" content="Ayres Guan">
+      <meta itemprop="description" content="文理齐蓄，兼容并包。">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Dit moi, la petit ephémère">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model)
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-10-17 08:22:22" itemprop="dateCreated datePublished" datetime="2022-10-17T08:22:22+08:00">2022-10-17</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-01-04 23:45:26" itemprop="dateModified" datetime="2023-01-04T23:45:26+08:00">2023-01-04</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Paper/" itemprop="url" rel="index"><span itemprop="name">Paper</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>【随机接触模型】建模的【加密货币价格模型】中的【多尺度】【复杂】【波动】【行为】<br>作者：Zhiyong Zheng, Yunfan Lu, Junhuan Zhang<br>文章：<a target="_blank" rel="noopener" href="https://www-sciencedirect-com.libezproxy.must.edu.mo/science/article/pii/S0378437122000528?casa_token=hmttd1BwfH8AAAAA:8jXXld71BYJ0PYHU3TWzRUvWyrfi2VqYoW3XZozBNv8LUP6A_HvHvXPEQraq-3BJODue88bD0Bfe">Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model</a></p>
+<h1 id="问题背景"><a href="#问题背景" class="headerlink" title="问题背景"></a>问题背景</h1><p>加密货币市场的波动已经开始能世界范围内影响各地的投资市场了。</p>
+<h1 id="关键引用"><a href="#关键引用" class="headerlink" title="关键引用"></a>关键引用</h1><ul>
+<li>C. Baek, M. Elbeck, Bitcoins as an investment or speculative vehicle? A first look, Appl. Econ. Lett. 22 (1) (2015) 30–34 - <em>“Bitcoin market returns are mostly internally driven by market participants”, which means the extreme volatility of cryptocurrencies could be only caused by the panic and fear of investors theoretically</em> - 比特币市场的收益的波动，大部分都是被市场参与者从内部所驱动的。这也就说明加密货币市场中价格的极端波动，理论上是因为投资者的集体性恐慌。</li>
+</ul>
+<h1 id="随机接触传染模型"><a href="#随机接触传染模型" class="headerlink" title="随机接触传染模型"></a>随机接触传染模型</h1><h2 id="模型假设："><a href="#模型假设：" class="headerlink" title="模型假设："></a>模型假设：</h2><ul>
+<li>受到感染的个体将会依据速率为$\lambda$的泊松过程，向其左右邻扩散病毒。</li>
+<li>一个健康个体在接触到邻舍传来的病毒时，会立刻转变为被感染状态，并且向左右邻扩散病毒。通过在分布$F$中随机采样得到一个时间$f$，经过$f$单位时间后，此人获得免疫。</li>
+<li>免疫了的人将不再收到相同病毒的感染。</li>
+<li>病毒的传播过程以及感染周期的随机过程之间两两独立。</li>
+</ul>
+<h2 id="模型过程"><a href="#模型过程" class="headerlink" title="模型过程"></a>模型过程</h2><p>状态空间：$\{1, i, 0\}^{\mathbb{Z}}$， $\mathbb{Z} \times \mathbb{R}_{+}$代表传播链长度，其中：</p>
+<ul>
+<li>1表示健康</li>
+<li>0表示免疫</li>
+<li>$i$表示染疫<br>对每对满足$|x-\tilde{x}|=1(x, \tilde{x} \in \mathbb{Z})$链条节点$(x, \tilde{x})$，建立两个相互独立的泊松过程：</li>
+<li>$\left\{U_n^{(x, \tilde{x})}, n \geq 1\right\}$，用来描述$x$单向感染$\tilde{x}$的时间节点，速率为$\lambda$</li>
+<li>$\left\{T_n^{(x)}, n \geq 1\right\}$，用来描述病患$x$自染疫到痊愈并免疫的时间周期长度，速率为$v$</li>
+</ul>
+<h2 id="参数对齐"><a href="#参数对齐" class="headerlink" title="参数对齐"></a>参数对齐</h2><p>0号病患占比$p_0=0.01$<br>康复免疫泊松过程的速率为$v=1$</p>
+<h1 id="迁移到价格模型"><a href="#迁移到价格模型" class="headerlink" title="迁移到价格模型"></a>迁移到价格模型</h1><p>利用随机接触模型的传染过程，模拟信息在不同的加密货币市场投资人之间的传递、并改变投资人投资策略的过程。<br>利用两个不同的泊松过程，模拟市场宏观中可能因为地缘政治、社会、自然环境等外因而导致的价格疾剧波动，两个泊松过程分别模拟市场价格的暴增、暴跌。</p>
+<h2 id="假设"><a href="#假设" class="headerlink" title="假设"></a>假设</h2><ul>
+<li>虚拟货币的价格变化源于投资者对于加密货币交易市场的态度。<br>  态度会如同病毒一样在投资者之间传播，使得其他人的决策产生变动。</li>
+<li>投资态度只有三种：买入、卖出、观望。<br>  以上投资者投资态度的加和表征了市场价格的羊群行为及其倾向性。</li>
+<li>投资者每天可以交易数次，但一次最多只能交易一个单位的虚拟货币。</li>
+</ul>
+<h2 id="模型组件名称缩写"><a href="#模型组件名称缩写" class="headerlink" title="模型组件名称缩写"></a>模型组件名称缩写</h2><h3 id="时间"><a href="#时间" class="headerlink" title="时间"></a>时间</h3><p>日期（天）$t \in\{1,2, \cdots, T\}$<br>每日交易时长$l$</p>
+<h3 id="价格"><a href="#价格" class="headerlink" title="价格"></a>价格</h3><p>虚拟货币在第$t$天的$s$时刻的价格：$\mathscr{P}_t(s)$，$s \in[0, l]$</p>
+<h3 id="参与者"><a href="#参与者" class="headerlink" title="参与者"></a>参与者</h3><p>加密货币市场的参与人数：$M+1$，$M$足够大<br>单个参与者在模型网格中的相对坐标系：$\{-M / 2, \ldots,-1,0,1, \ldots, M / 2\} \subset \mathbb{Z}$<br>参与者被分为三类：</p>
+<ul>
+<li>“感染者”$type-inf$，</li>
+<li>“未感染者”$type-sus$，</li>
+<li>“免疫者”$type-imm$<br>交易态度：$\zeta(t)$ with values $\{1,-1,0\}$</li>
+<li>1: 买， 概率$p_{\zeta(t)=1}$</li>
+<li>0: 观望，概率$1-p_{\zeta(t)=1}-q_{\zeta(t)=-1}$</li>
+<li>-1: 卖，概率$q_{\zeta(t)=-1}$</li>
+</ul>
+<h2 id="机制"><a href="#机制" class="headerlink" title="机制"></a>机制</h2><p>在每一个交易日$d \in t$<br>根据概率分布$\mathbb{G}$随机选取几个智能体成为感染者，剩下的都是未感染者。<br>所有的感染者的投资态度一致。</p>
+<ul>
+<li>所有感染者都声称自己有市场内幕消息</li>
+<li>未感染者都没有收到信息</li>
+<li>免疫者觉得当前这个信息是扯淡</li>
+</ul>
+<h2 id="收益"><a href="#收益" class="headerlink" title="收益"></a>收益</h2><script type="math/tex; mode=display">
+r_t=\ln \mathscr{P}_t-\ln \mathscr{P}_{t-1}, \quad t \in\{1,2, \ldots, T\}</script><p>t时刻的收益，等于ln（当前时刻价格）减去ln（上一时刻价格）<br><img src="/images/multi_scale_crypto/Pasted image 20221022130343.png" alt=""><br>收盘价格曲线说明：</p>
+<ul>
+<li>加密货币市场的收盘价格剧烈波动，繁荣与萧条都很难长期维持</li>
+<li>价格变化较大<br>盈利曲线说明：</li>
+<li>加密货币市场相当不稳定</li>
+</ul>
+<p><img src="/images/multi_scale_crypto/Pasted image 20221022131758.png" alt=""><br>BCH，BTC，ETH，LTC，XRP是加密货币的价格，DJI，SSE分别是两支股票的价格<br>表中可以得知：<br><strong>论据：</strong> 表中几个加密货币价格的<em>标准差</em>大于两个股票的价格<br>结论：<br>加密货币市场的波动变化比实际股票市场的波动更激烈。</p>
+<p><strong>论据：</strong> BCH的$\alpha_{r^+} &lt; \alpha_{r^-}$，亏损的肥尾指数大于盈利的<br>结论：<br>炒BCH出现极端亏损的情况更为频繁</p>
+<p><img src="/images/multi_scale_crypto/Pasted image 20221022133258.png" alt=""><br>刻画了5种加密货币收益的数字分布特征。<br>在a的x-linear y-log的刻画中，几个加密货币几乎都是关于0点对称的钟形曲线<br><strong>论据：</strong> 加密货币偏度(skewness)的数据都是负数<br>结论：收益向左扩散，加密货币市场具备收益的fat-tail效应</p>
+<p><img src="/images/multi_scale_crypto/Pasted image 20221022142116.png" alt=""><br>KS, AD, JB测试的关键值分别是0.041， 0.7514， 5.9377<br><strong>论据：</strong> 几种加密货币的关键值和这三种测试的关键值相去甚远</p>
+<p>结论：<br>这种加密货币在假设检验$H=1$， significan level是5%的时候，不服从于高斯分布。</p>
+<h2 id="智能体的决策聚合"><a href="#智能体的决策聚合" class="headerlink" title="智能体的决策聚合"></a>智能体的决策聚合</h2><script type="math/tex; mode=display">
+\mathscr{A}_t(s)=\left(\zeta_t\left|\sum \eta_s^\rho\right|\right) /(M+1)</script><h2 id="价格-1"><a href="#价格-1" class="headerlink" title="价格"></a>价格</h2><script type="math/tex; mode=display">
+\mathscr{P}_t^{\text {common }}=\mathscr{P}_{t-1}^{\text {common }} \exp \left\{\gamma \mathscr{A}_t(l)\right\}, \quad t \in\{1,2, \ldots, T\}</script><h3 id="金融市场的价格"><a href="#金融市场的价格" class="headerlink" title="金融市场的价格"></a>金融市场的价格</h3><script type="math/tex; mode=display">
+\mathscr{P}_t=\mathscr{P}_0 \exp \left\{\sum_{k=1}^t \gamma \mathscr{A}_k(l)+\beta_1 \sum_{j=1}^{\xi_t^1}\left|\mathscr{B}^1\left(\varpi_j\right)\right|-\beta_2 \sum_{k=1}^{\xi_t^2}\left|\mathscr{B}^2\left(\varpi_k\right)\right|\right\}, \quad t \in\{1,2, \ldots, T\}</script><p>解释：<br>每个投资人的微观决策聚合+宏观市场的涨跌=加密货币的实际价格</p>
+<h2 id="参数对齐-1"><a href="#参数对齐-1" class="headerlink" title="参数对齐"></a>参数对齐</h2><p>交易日数：$T=1000$<br>交易参与人数：$M=1000$<br>感染过程速率：$\lambda=9, 10, 11, 12, 13$</p>
+<h1 id="Composite-Multiscale-Fuzzy-Entropy复合多尺度模糊熵"><a href="#Composite-Multiscale-Fuzzy-Entropy复合多尺度模糊熵" class="headerlink" title="Composite Multiscale Fuzzy Entropy复合多尺度模糊熵"></a>Composite Multiscale Fuzzy Entropy复合多尺度模糊熵</h1><p>CMFE<br>本质上就是对各种长度的采样方法，遍历时间序列的各种组合形式.</p>
+<h2 id="引入目的"><a href="#引入目的" class="headerlink" title="引入目的"></a>引入目的</h2><p>对比衡量生成数据与真实数据背后的决策行为复杂度，以此证明该方法成功模拟了现实加密货币市场的复杂性。</p>
+<h2 id="模型"><a href="#模型" class="headerlink" title="模型"></a>模型</h2><h3 id="模糊熵"><a href="#模糊熵" class="headerlink" title="模糊熵"></a>模糊熵</h3><h4 id="计算过程"><a href="#计算过程" class="headerlink" title="计算过程"></a>计算过程</h4><p><strong>第一步：进行时间序列嵌入向量</strong><br>目标：时间序列数据$\{x(i): 1 \leq i \leq N\}$，时序长度为$N$<br>嵌入向量表示方法：</p>
+<script type="math/tex; mode=display">
+X_m(i)=\{x(i), x(i+1), \ldots, x(i+m-1)\}-\bar{x}(i)</script><p>在$i$时刻 的$m$号 嵌入$X_m(i)$就是：<br>    从$i$时刻开始，向后一共提取连续的$m$个时序数据，组成一个集合，再将集合中的所有元素减去它们的均值，以做到均一化。</p>
+<pre><code>    - 均值计算：$\bar&#123;x&#125;(i)=\frac&#123;1&#125;&#123;m&#125; \sum_&#123;k=0&#125;^&#123;m-1&#125; x(i+k)$
+    - $i$的选择范围不能让这个嵌入的取值超过本身的时序长度限制$N$: $1 \leq i \leq N-m+1$
+</code></pre><p><strong>第二步：经过模糊公式，计算两个向量之间的相似度</strong><br>对两个向量的要求：两个向量的<strong>长度一致</strong>，也即$m$一样</p>
+<p>嵌入向量间的模糊公式计算：</p>
+<script type="math/tex; mode=display">
+D_{i j}^m=\mu\left(d_{i j}^m, \zeta, r\right)=e^{-\left(\frac{d_{i j}^m}{r}\right)^\zeta}</script><p>其中：</p>
+<ul>
+<li>$\begin{aligned} d_{i j}^m &amp;=d\left[X_i^m, X_j^m\right] \\ &amp;=\max \{|x(i+k)-\bar{x}(i)-(x(j+k)-\bar{x}(j))|\end{aligned}$  最大的波动幅度差</li>
+<li>$\zeta$是选择幂（chosen power），是一个超参数（？）</li>
+<li>$r$是相似容忍限度(tolerance level），应该也是个超参数（？）</li>
+</ul>
+<p>直观解释:<br>    针对两个嵌入向量，从$i$时刻或$j$时刻起始，一步一步加大步长，寻找两个向量之间<strong>最大波动幅度差</strong>。</p>
+<p><strong>第三步：全局定义一个概率分布，用来刻画两对向量间相似程度相同的现象频次</strong><br>相似度出现频率统计公式：</p>
+<script type="math/tex; mode=display">
+\Psi^m(r)=\frac{1}{N-m} \sum_{i=1}^{N-m}\left(\frac{1}{N-m-1} \sum_{j=1, j \neq i}^{N-m} D_{i j}^m\right)</script><p>给定一个区间长度$m$，给定一个容忍度$r$，计算出现频次$\Psi^m(r)$</p>
+<p>直观理解:<br>其实就是两个for循环，对所有可能的i和j进行遍历，然后再对它取平均，加和了$\chi$次就除以$\chi$求取均值。<br><strong>第四步：重复上述三个步骤，直到遍历完成</strong></p>
+<script type="math/tex; mode=display">
+\Psi^{m+1}(r)=\frac{1}{N-m-1} \sum_{i=1}^{N-m-1}\left(\frac{1}{N-m-2} \sum_{j=1, j \neq i}^{N-m-1} D_{i j}^{m+1}\right)</script><p><strong>第五步：估计模糊熵</strong></p>
+<script type="math/tex; mode=display">
+\operatorname{FuzzyEn}(m, r)=-\ln \left[\Psi^{(m+1)}(r) / \Psi^{(m)}(r)\right]</script><p>给定一个时间序列长度，一个容忍度，计算得到这个数值。</p>
+<h4 id="此模型中的引用目的"><a href="#此模型中的引用目的" class="headerlink" title="此模型中的引用目的"></a>此模型中的引用目的</h4><p>引入模糊熵来衡量时间序列的复杂度，如果生成的和实际的复杂度数值相差不大，则可以一定程度上说明。</p>
+<h4 id="为什么用模糊熵而"><a href="#为什么用模糊熵而" class="headerlink" title="为什么用模糊熵而"></a>为什么用模糊熵而</h4><ul>
+<li>模糊熵在采样长度上具有更高的独立性</li>
+<li>模糊熵的偏差更小，因其更强的相对稳定性<h4 id="参数"><a href="#参数" class="headerlink" title="参数"></a>参数</h4>m指代了分析的颗粒度，m越大，分析得也越粗糙。</li>
+</ul>
+<h3 id="多尺度的引入"><a href="#多尺度的引入" class="headerlink" title="多尺度的引入"></a>多尺度的引入</h3><p>这里的尺度意味着：不同的数据颗粒度，颗粒度越大，单次采样时序数据越多。<br>粗粒度向量：</p>
+<script type="math/tex; mode=display">
+y_\tau(i)=\frac{1}{\tau} \sum_{j=(i-1) \tau+k}^{i \tau+k-1} x(j)</script><p>$\tau$ - (scale factor)尺度系数，调整$\tau$的大小就可以调整粒度的大小，从而一定程度上压缩时序数据，同时这里的$1 \leq k \leq \tau$。这个时候，利用上面的公式进行扩展，将所有可能的$\tau$都遍历一遍，列写各种粒度下的向量：</p>
+<script type="math/tex; mode=display">\mathbf{y}_k^{(\tau)}=\left\{y_{k, i}^{(\tau)}, i=1,2, \ldots, N / \tau\right\}</script><p>再增加对k值的遍历，推演得到复合多尺度模糊熵</p>
+<script type="math/tex; mode=display">
+\operatorname{CMFE}(\tau, m, r)=\frac{1}{\tau} \sum_{k=1}^\tau\left(\operatorname{FuzzyEn}\left(\mathbf{y}_k^{(\tau)}, m, r\right)\right)</script><h2 id="参数对齐-2"><a href="#参数对齐-2" class="headerlink" title="参数对齐"></a>参数对齐</h2><p>$m=2$<br>$\zeta = 2$<br>$r = 0.15\sigma$，其中$\sigma$是对应时间序列数据的标准差。</p>
+<h1 id="Match-Energy匹配能"><a href="#Match-Energy匹配能" class="headerlink" title="Match Energy匹配能"></a>Match Energy匹配能</h1><p>ME</p>
+<h2 id="引入目的-1"><a href="#引入目的-1" class="headerlink" title="引入目的"></a>引入目的</h2><p>分析行为的复杂度</p>
+<h3 id="优点"><a href="#优点" class="headerlink" title="优点"></a>优点</h3><ul>
+<li>高速</li>
+<li>适用于较小尺度的数据集</li>
+<li>对数据复杂性的分类效果非常好</li>
+</ul>
+<h2 id="模型-1"><a href="#模型-1" class="headerlink" title="模型"></a>模型</h2><p>给定一个时序数据$\mathbf{X}=\left\{x_1, x_2, \ldots x_T\right\}$，长度为$T$<br>先利用Differential Dynamical Quantization方法进行时序数据的归一化。</p>
+<h3 id="第一步：排序"><a href="#第一步：排序" class="headerlink" title="第一步：排序"></a>第一步：排序</h3><p>去除时间因素，按照数据的数值大小进行排序<br><strong>参数：</strong>$\mathbf{X}$<br>输出：<br>    升序：$\mathbf{P}=\left\{p_1, p_2, \ldots p_T\right\}$<br>    降序：$\mathbf{Q}=\left\{q_1, q_2, \ldots q_T\right\}$</p>
+<h3 id="第二步：-构建嵌入向量"><a href="#第二步：-构建嵌入向量" class="headerlink" title="第二步： 构建嵌入向量"></a>第二步： 构建嵌入向量</h3><p>超参数：</p>
+<ul>
+<li>嵌入(embedding)维度 $m$</li>
+<li>延时系数 $\tau$，其中$1 \leq \tau \leq m$<br><strong>参数：</strong> $\mathbf{X}, \mathbf{P}, \mathbf{Q}$<br>输出：<br>  $\mathbf{x}_i=\left\{x_{i \tau}, x_{i \tau+1}, \ldots, x_{i \tau+(m-1)}\right\}$<br>  $\mathbf{p}_i = \left\{p_{i \tau}, p_{i \tau+1}, \ldots, p_{i \tau+(m-1)}\right\}$<br>  $\mathbf{q}_i=\left\{q_{i \tau}, q_{i \tau+1}, \ldots, q_{i \tau+(m-1)}\right\}$</li>
+</ul>
+<h3 id="第三步：对嵌入向量排序"><a href="#第三步：对嵌入向量排序" class="headerlink" title="第三步：对嵌入向量排序"></a>第三步：对嵌入向量排序</h3><p><strong>参数：</strong>$\mathbf{x}_i=\left\{x_{i \tau}, x_{i \tau+1}, \ldots, x_{i \tau+(m-1)}\right\}$<br>输出：<br>    升序：$\mathbf{y}_i$<br>    降序：$\mathbf{z}_i$</p>
+<h3 id="第四步：构建匹配坐标系"><a href="#第四步：构建匹配坐标系" class="headerlink" title="第四步：构建匹配坐标系"></a>第四步：构建匹配坐标系</h3><p><strong>参数：</strong> 升序比较（$\mathbf{p}_i$ with $\mathbf{y}_i$）【匹配坐标数$m_1$】<br>输出：<br>    匹配坐标系：$\mathbf{V}^{(\mathbf{1})}$<br>        本质：向量空间</p>
+<p><strong>参数：</strong> 降序比较（$\mathbf{q}_i$ with $\mathbf{z}_i$）【匹配坐标数$m_1^{\prime}$】<br>输出：<br>    不匹配坐标系：$\mathbf{V}^{(\mathbf{2})}$<br>        本质：向量空间<br>        维度：$m-m_1$</p>
+<h3 id="第五步：向量投影并计算能量"><a href="#第五步：向量投影并计算能量" class="headerlink" title="第五步：向量投影并计算能量"></a>第五步：向量投影并计算能量</h3><script type="math/tex; mode=display">
+E_{i-}=\sqrt{\frac{1}{m_1} \sum_{j=1}^{m_1}\left(\mathbf{x}_i^{(1)}(j)-\overline{\mathbf{x}_i^{(1)}}\right)^2}</script><script type="math/tex; mode=display">
+E_{i+}=\sqrt{\frac{1}{m-m_1} \sum_{j=1}^{m-m_1}\left(\mathbf{x}_i^{(2)}(j)-\overline{\mathbf{x}_i^{(2)}}\right)^2}</script><p><strong>参数：</strong>$\mathbf{x}_i$， $\mathbf{V}^{(\mathbf{1})}$， $\mathbf{V}^{(\mathbf{2})}$<br>输出：<br>    在升序匹配坐标系的投影：$\mathbf{x}_i^{(1)}$<br>    在降序匹配坐标系的投影：$\mathbf{x}_i^{(2)}$</p>
+<p><strong>参数：</strong>$\mathbf{x}_i^{(1)}$， $\mathbf{x}_i^{(2)}$,           $\mathbf{x}_i^{(1)}$的均值 $\overline{\mathbf{x}_i^{(1)}}$,          $\mathbf{x}_i^{(2)}$的均值 $\overline{\mathbf{x}_i^{(2)}}$<br>输出：<br>    升序匹配能：$E_{i-}$<br>    降序匹配能：$E_{i+}$</p>
+<h3 id="第六步：将排序后的嵌入向量也进行第五步的计算，并且计算它们之间的距离"><a href="#第六步：将排序后的嵌入向量也进行第五步的计算，并且计算它们之间的距离" class="headerlink" title="第六步：将排序后的嵌入向量也进行第五步的计算，并且计算它们之间的距离"></a>第六步：将排序后的嵌入向量也进行第五步的计算，并且计算它们之间的距离</h3><script type="math/tex; mode=display">
+d_{i-}=\frac{1}{2}\left(d_{i-}^{(p)}+d_{i-}^{(q)}\right)</script><script type="math/tex; mode=display">
+d_{i-}^{(p)}=\sqrt{\frac{1}{m_1} \sum_{j=1}^{m_1}\left(\mathbf{y}_i^{(1)}(j)-\mathbf{p}_i^{(1)}(j)\right)^2} \text { and } d_{i-}^{(q)}=\sqrt{\frac{1}{m_1^{\prime}} \sum_{j=1}^{m_1^{\prime}}\left(\mathbf{z}_i^{(1)}(j)-\mathbf{q}_i^{(1)}(j)\right)^2}</script><script type="math/tex; mode=display">
+d_{i+}=\frac{1}{2}\left(d_{i+}^{(p)}+d_{i+}^{(q)}\right)</script><script type="math/tex; mode=display">
+d_{i+}^{(p)}=\sqrt{\frac{1}{m-m_1} \sum_{j=1}^{m-m_1}\left(\mathbf{y}_i^{(2)}(j)-\mathbf{p}_i^{(2)}(j)\right)^2} \text { and } d_{i+}^{(q)}=\sqrt{\frac{1}{m-m_1^{\prime}} \sum_{j=1}^{m-m_1^{\prime}}\left(\mathbf{z}_i^{(2)}(j)-\mathbf{q}_i^{(2)}(j)\right)^2}</script><h3 id="第七步：利用上述数据构筑局部能量模型"><a href="#第七步：利用上述数据构筑局部能量模型" class="headerlink" title="第七步：利用上述数据构筑局部能量模型"></a>第七步：利用上述数据构筑局部能量模型</h3><script type="math/tex; mode=display">
+E_i(m)=\left\{\begin{array}{cc}
+E_{i-}+d_{i-}=0, & \text { if } m_1+m_1^{\prime} \neq 0 \\
+E_{i+}+d_{i+}, & \text { if } m_1+m_1^{\prime}=0
+\end{array}\right.</script><h3 id="第八步：将所有的局部能量取均值得到匹配能ME"><a href="#第八步：将所有的局部能量取均值得到匹配能ME" class="headerlink" title="第八步：将所有的局部能量取均值得到匹配能ME"></a>第八步：将所有的局部能量取均值得到匹配能ME</h3><script type="math/tex; mode=display">
+\mathrm{ME}=\frac{1}{T} \sum_{i=0}^{T-1} E_i(m)</script>
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Stochastic-Process/" rel="tag"># Stochastic Process</a>
+              <a href="/tags/Cryptocurrency-market/" rel="tag"># Cryptocurrency market</a>
+              <a href="/tags/Multi-agent-System/" rel="tag"># Multi-agent System</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/2022/10/17/Score-based%20Diffusion%20Model/" rel="next" title="基于分数(score-based)的扩散(Diffusion)模型">
+      基于分数(score-based)的扩散(Diffusion)模型 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E9%97%AE%E9%A2%98%E8%83%8C%E6%99%AF"><span class="nav-number">1.</span> <span class="nav-text">问题背景</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E5%BC%95%E7%94%A8"><span class="nav-number">2.</span> <span class="nav-text">关键引用</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E9%9A%8F%E6%9C%BA%E6%8E%A5%E8%A7%A6%E4%BC%A0%E6%9F%93%E6%A8%A1%E5%9E%8B"><span class="nav-number">3.</span> <span class="nav-text">随机接触传染模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E5%81%87%E8%AE%BE%EF%BC%9A"><span class="nav-number">3.1.</span> <span class="nav-text">模型假设：</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E8%BF%87%E7%A8%8B"><span class="nav-number">3.2.</span> <span class="nav-text">模型过程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%82%E6%95%B0%E5%AF%B9%E9%BD%90"><span class="nav-number">3.3.</span> <span class="nav-text">参数对齐</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E8%BF%81%E7%A7%BB%E5%88%B0%E4%BB%B7%E6%A0%BC%E6%A8%A1%E5%9E%8B"><span class="nav-number">4.</span> <span class="nav-text">迁移到价格模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%81%87%E8%AE%BE"><span class="nav-number">4.1.</span> <span class="nav-text">假设</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E7%BB%84%E4%BB%B6%E5%90%8D%E7%A7%B0%E7%BC%A9%E5%86%99"><span class="nav-number">4.2.</span> <span class="nav-text">模型组件名称缩写</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%97%B6%E9%97%B4"><span class="nav-number">4.2.1.</span> <span class="nav-text">时间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%B7%E6%A0%BC"><span class="nav-number">4.2.2.</span> <span class="nav-text">价格</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%82%E4%B8%8E%E8%80%85"><span class="nav-number">4.2.3.</span> <span class="nav-text">参与者</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9C%BA%E5%88%B6"><span class="nav-number">4.3.</span> <span class="nav-text">机制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%94%B6%E7%9B%8A"><span class="nav-number">4.4.</span> <span class="nav-text">收益</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%99%BA%E8%83%BD%E4%BD%93%E7%9A%84%E5%86%B3%E7%AD%96%E8%81%9A%E5%90%88"><span class="nav-number">4.5.</span> <span class="nav-text">智能体的决策聚合</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BB%B7%E6%A0%BC-1"><span class="nav-number">4.6.</span> <span class="nav-text">价格</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%87%91%E8%9E%8D%E5%B8%82%E5%9C%BA%E7%9A%84%E4%BB%B7%E6%A0%BC"><span class="nav-number">4.6.1.</span> <span class="nav-text">金融市场的价格</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%82%E6%95%B0%E5%AF%B9%E9%BD%90-1"><span class="nav-number">4.7.</span> <span class="nav-text">参数对齐</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Composite-Multiscale-Fuzzy-Entropy%E5%A4%8D%E5%90%88%E5%A4%9A%E5%B0%BA%E5%BA%A6%E6%A8%A1%E7%B3%8A%E7%86%B5"><span class="nav-number">5.</span> <span class="nav-text">Composite Multiscale Fuzzy Entropy复合多尺度模糊熵</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BC%95%E5%85%A5%E7%9B%AE%E7%9A%84"><span class="nav-number">5.1.</span> <span class="nav-text">引入目的</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B"><span class="nav-number">5.2.</span> <span class="nav-text">模型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A8%A1%E7%B3%8A%E7%86%B5"><span class="nav-number">5.2.1.</span> <span class="nav-text">模糊熵</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AE%A1%E7%AE%97%E8%BF%87%E7%A8%8B"><span class="nav-number">5.2.1.1.</span> <span class="nav-text">计算过程</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%AD%A4%E6%A8%A1%E5%9E%8B%E4%B8%AD%E7%9A%84%E5%BC%95%E7%94%A8%E7%9B%AE%E7%9A%84"><span class="nav-number">5.2.1.2.</span> <span class="nav-text">此模型中的引用目的</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E7%94%A8%E6%A8%A1%E7%B3%8A%E7%86%B5%E8%80%8C"><span class="nav-number">5.2.1.3.</span> <span class="nav-text">为什么用模糊熵而</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8F%82%E6%95%B0"><span class="nav-number">5.2.1.4.</span> <span class="nav-text">参数</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%9A%E5%B0%BA%E5%BA%A6%E7%9A%84%E5%BC%95%E5%85%A5"><span class="nav-number">5.2.2.</span> <span class="nav-text">多尺度的引入</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%82%E6%95%B0%E5%AF%B9%E9%BD%90-2"><span class="nav-number">5.3.</span> <span class="nav-text">参数对齐</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Match-Energy%E5%8C%B9%E9%85%8D%E8%83%BD"><span class="nav-number">6.</span> <span class="nav-text">Match Energy匹配能</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BC%95%E5%85%A5%E7%9B%AE%E7%9A%84-1"><span class="nav-number">6.1.</span> <span class="nav-text">引入目的</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BC%98%E7%82%B9"><span class="nav-number">6.1.1.</span> <span class="nav-text">优点</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B-1"><span class="nav-number">6.2.</span> <span class="nav-text">模型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E6%AD%A5%EF%BC%9A%E6%8E%92%E5%BA%8F"><span class="nav-number">6.2.1.</span> <span class="nav-text">第一步：排序</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E6%AD%A5%EF%BC%9A-%E6%9E%84%E5%BB%BA%E5%B5%8C%E5%85%A5%E5%90%91%E9%87%8F"><span class="nav-number">6.2.2.</span> <span class="nav-text">第二步： 构建嵌入向量</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E6%AD%A5%EF%BC%9A%E5%AF%B9%E5%B5%8C%E5%85%A5%E5%90%91%E9%87%8F%E6%8E%92%E5%BA%8F"><span class="nav-number">6.2.3.</span> <span class="nav-text">第三步：对嵌入向量排序</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E5%9B%9B%E6%AD%A5%EF%BC%9A%E6%9E%84%E5%BB%BA%E5%8C%B9%E9%85%8D%E5%9D%90%E6%A0%87%E7%B3%BB"><span class="nav-number">6.2.4.</span> <span class="nav-text">第四步：构建匹配坐标系</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%BA%94%E6%AD%A5%EF%BC%9A%E5%90%91%E9%87%8F%E6%8A%95%E5%BD%B1%E5%B9%B6%E8%AE%A1%E7%AE%97%E8%83%BD%E9%87%8F"><span class="nav-number">6.2.5.</span> <span class="nav-text">第五步：向量投影并计算能量</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E5%85%AD%E6%AD%A5%EF%BC%9A%E5%B0%86%E6%8E%92%E5%BA%8F%E5%90%8E%E7%9A%84%E5%B5%8C%E5%85%A5%E5%90%91%E9%87%8F%E4%B9%9F%E8%BF%9B%E8%A1%8C%E7%AC%AC%E4%BA%94%E6%AD%A5%E7%9A%84%E8%AE%A1%E7%AE%97%EF%BC%8C%E5%B9%B6%E4%B8%94%E8%AE%A1%E7%AE%97%E5%AE%83%E4%BB%AC%E4%B9%8B%E9%97%B4%E7%9A%84%E8%B7%9D%E7%A6%BB"><span class="nav-number">6.2.6.</span> <span class="nav-text">第六步：将排序后的嵌入向量也进行第五步的计算，并且计算它们之间的距离</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E4%B8%83%E6%AD%A5%EF%BC%9A%E5%88%A9%E7%94%A8%E4%B8%8A%E8%BF%B0%E6%95%B0%E6%8D%AE%E6%9E%84%E7%AD%91%E5%B1%80%E9%83%A8%E8%83%BD%E9%87%8F%E6%A8%A1%E5%9E%8B"><span class="nav-number">6.2.7.</span> <span class="nav-text">第七步：利用上述数据构筑局部能量模型</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AC%AC%E5%85%AB%E6%AD%A5%EF%BC%9A%E5%B0%86%E6%89%80%E6%9C%89%E7%9A%84%E5%B1%80%E9%83%A8%E8%83%BD%E9%87%8F%E5%8F%96%E5%9D%87%E5%80%BC%E5%BE%97%E5%88%B0%E5%8C%B9%E9%85%8D%E8%83%BDME"><span class="nav-number">6.2.8.</span> <span class="nav-text">第八步：将所有的局部能量取均值得到匹配能ME</span></a></li></ol></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Ayres Guan"
+      src="/images/avatar.png">
+  <p class="site-author-name" itemprop="name">Ayres Guan</p>
+  <div class="site-description" itemprop="description">文理齐蓄，兼容并包。</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">5</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Geosity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Geosity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:geositty@gmail.com" title="E-Mail → mailto:geositty@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://www.instagram.com/ayresguan.st/" title="Instagram → https:&#x2F;&#x2F;www.instagram.com&#x2F;ayresguan.st&#x2F;" rel="noopener" target="_blank"><i class="fab fa-instagram fa-fw"></i></a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Ayres Guan</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+      
+
+<script>
+  if (typeof MathJax === 'undefined') {
+    window.MathJax = {
+      loader: {
+        source: {
+          '[tex]/amsCd': '[tex]/amscd',
+          '[tex]/AMScd': '[tex]/amscd'
+        }
+      },
+      tex: {
+        inlineMath: {'[+]': [['$', '$']]},
+        tags: 'ams'
+      },
+      options: {
+        renderActions: {
+          findScript: [10, doc => {
+            document.querySelectorAll('script[type^="math/tex"]').forEach(node => {
+              const display = !!node.type.match(/; *mode=display/);
+              const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display);
+              const text = document.createTextNode('');
+              node.parentNode.replaceChild(text, node);
+              math.start = {node: text, delim: '', n: 0};
+              math.end = {node: text, delim: '', n: 0};
+              doc.math.push(math);
+            });
+          }, '', false],
+          insertedScript: [200, () => {
+            document.querySelectorAll('mjx-container').forEach(node => {
+              let target = node.parentNode;
+              if (target.nodeName.toLowerCase() === 'li') {
+                target.parentNode.classList.add('has-jax');
+              }
+            });
+          }, '', false]
+        }
+      }
+    };
+    (function () {
+      var script = document.createElement('script');
+      script.src = '//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+      script.defer = true;
+      document.head.appendChild(script);
+    })();
+  } else {
+    MathJax.startup.document.state(0);
+    MathJax.texReset();
+    MathJax.typeset();
+  }
+</script>
+
+    
+
+  
+
+</body>
+</html>
