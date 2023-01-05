@@ -1,50 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
-    <title>Improved DDPM</title>
-    <url>/2022/11/27/Improved%20Denoising%20Diffusion%20Probabilistic%20Models/</url>
-    <content><![CDATA[<p>对DDPM进行改进<br>原文：<a href="http://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf">戳我</a><br>作者：Alex Nichol, Prafulla Dhariwal</p>
-<h1 id="Improvement"><a href="#Improvement" class="headerlink" title="Improvement"></a>Improvement</h1><h2 id="1-对数似然估计"><a href="#1-对数似然估计" class="headerlink" title="1- 对数似然估计"></a>1- 对数似然估计</h2><p>“Razavi, A., van den Oord, A., and Vinyals, O. Generating diverse high-fidelity images with vq-vae-2, 2019.” —— 对对数似然进行估计的优化过程，可以迫使生成模型获取原始数据所有的特征分布。</p>
-<p>“Henighan, T., Kaplan, J., Katz, M., Chen, M., Hesse, C., Jackson, J., Jun, H., Brown, T. B., Dhariwal, P., Gray, S., Hallacy, C., Mann, B., Radford, A., Ramesh, A., Ryder,N., Ziegler, D. M., Schulman, J., Amodei, D., and McCandlish, S. Scaling laws for autoregressive generative modeling, 2020.” —— 在对对数似然上进行微小的提升就可以大幅度提高采样的质量。</p>
-<p>因此：很有必要思考怎样让DDPM在对对数似然的优化更进一步。<br>前期的实验结果发现，把扩散步数$T$增加可以有效提高对数似然的效果。<br>    $T$从1000提高到4000，对数似然提高到3.77</p>
-<h3 id="1-1-对协方差进行预测"><a href="#1-1-对协方差进行预测" class="headerlink" title="1.1- 对协方差进行预测"></a>1.1- 对协方差进行预测</h3><p>DDPM降噪采样时的方差是固定的，固定为：$\Sigma_\theta\left(x_t, t\right)=\sigma_t^2 I$，并且固定$\sigma_t = \beta_t$<br><img src="/images/iddpm/Pasted image 20221127124438.png" alt=""><br>但是很奇怪的是，在降噪的采样实验中，不论是让$\sigma_t = \beta_t$还是让$\sigma_t = \tilde{\beta}_t$，采样的质量差不多。难道是方差其实根本不是决定采样质量的变量？<br>    补充：$\tilde{\beta}_t:=\frac{1-\bar{\alpha}_{t-1}}{1-\bar{\alpha}_t} \beta_t$，$\bar{\alpha}_t:=\prod_{s=0}^t \alpha_s$，$\alpha_t:=1-\beta_t$<br>为了验证这个猜想作者绘制了上图，并发现在扩散进度$t=0$的位置，$\beta_t$和$\tilde{\beta}_t$几乎一致。这说明在有限的扩散步数之内，方差$\sigma_t$不一定和采样质量之间存在关联。</p>
-<p>换句话说就是，我们在添加更多的扩散步数之后，<em>采样质量的高低更多的还是与降噪采样的均值相关</em>。</p>
-<p>同时该图也表明<strong>协方差的合理范围（$\beta$ ~ $\tilde{\beta}$ ）是很小的</strong>，如果利用神经网络直接对其进行预测的话，需要这个神经网络达到相当高程度的精度，这对现有的神经网络来说还是不太好实现的。</p>
-<p>所以说可以转换一个思路，让神经网络去预测一个参数，让参数规划出来的数值落在$\beta$ ~ $\tilde{\beta}$ 之间，这样神经网络就可以更好训练了。</p>
-<script type="math/tex; mode=display">
-\Sigma_\theta\left(x_t, t\right)=\exp \left(v \log \beta_t+(1-v) \log \tilde{\beta}_t\right)</script><p>并且在对$v$进行预测的过程中，作者并没有为其增加什么约束，理论上这可能让最后的协方差超过预期的范围，不过实践中这种情况这并没有发生过，可以假定应该是这个神经网络的定义方式本身已经对其数值的上下界有了一定的约束。</p>
-<p><img src="/images/iddpm/Pasted image 20221127125740.png" alt=""><br>不过与此同时，上图的实验也证明，在扩散过程的前几步对最小化变分下界(Variational Lower BOund)而言是效用最高的。因此我们仍然可以说，协方差的选择是和训练效果、采样效果相关的。</p>
-<p>基于上述两个特殊的实验，在重新把协方差纳入考量之后，为了最大化利用协方差和效果的相关性，训练的优化目标也进一步发生改变：</p>
-<script type="math/tex; mode=display">
-L_{\text {hybrid }}=L_{\text {simple }}+\lambda L_{\mathrm{vlb}}</script><p>这里$\lambda=1e-3$</p>
-<h3 id="1-2-对噪声数据更好地进行规划"><a href="#1-2-对噪声数据更好地进行规划" class="headerlink" title="1.2- 对噪声数据更好地进行规划"></a>1.2- 对噪声数据更好地进行规划</h3><p><img src="/images/iddpm/Pasted image 20221127131446.png" alt=""><br>在DDPM中，数值从小到大，噪声的规划是线性的，但是作者发现，这种线性递增的噪音其实很有可能扩散到一半的时候，就让数据完全服从高斯分布了（上），再后面的噪声添加已经对采样、对训练没有任何意义。</p>
-<p><img src="/images/iddpm/Pasted image 20221127131521.png" alt=""><br><img src="/images/iddpm/Pasted image 20221127131849.png" alt=""><br>所以作者提出了cos噪声规划方法，使得噪声添加的量呈非线性，同时在cos噪声规划的情况下$\bar{\alpha}_t$的变化更为线性而平缓，可以有效防止数据在中途某一步突然被添加大量噪声，因此降低神经网络的训练难度，理论上一定程度提高了训练效果。</p>
-<h4 id="Cosine噪声规划"><a href="#Cosine噪声规划" class="headerlink" title="Cosine噪声规划"></a>Cosine噪声规划</h4><p>公式：</p>
-<script type="math/tex; mode=display">
-\bar{\alpha}_t=\frac{f(t)}{f(0)}, \quad f(t)=\cos \left(\frac{t / T+s}{1+s} \cdot \frac{\pi}{2}\right)^2</script><p>这种规划方法利用$s$替换了原本DDPM的噪声参数$\beta$，防止其在靠近$t=0$的时候过小，这也是因为作者团队在上述研究的发现：<br>在刚开始扩散的时候效果其实是最好的，这个时候如果噪声数量过少，不利于神经网络对噪声$\epsilon$的预测。</p>
-<p>$s=8e-3$<br>作者团队选择$\cos^2(\cdot)$的形式是因为这个函数的形状是符合作者团队对噪声规划的预期的，同时这也是一个数学中常见的函数。当然这里也可以选择其他的函数，具体什么函数更好就看后人的工作了。<br><img src="/images/iddpm/Pasted image 20221127135032.png" alt=""></p>
-<h3 id="1-3-降低梯度数据中的噪声"><a href="#1-3-降低梯度数据中的噪声" class="headerlink" title="1.3- 降低梯度数据中的噪声"></a>1.3- 降低梯度数据中的噪声</h3><p><img src="/images/iddpm/Pasted image 20221127133001.png" alt=""><br>在1.1中，对目标引入了$L_{vlb}$，但是作者也发现关于这个目标的优化实在是有点困难。上图表明$L_{hybrid}$的效果好于$L_{vlb}$，作者基于此假设：<br>$L_{vlb}$在训练时的梯度相比于$L_{hybrid}$而言，噪声更多。</p>
-<p><img src="/images/iddpm/Pasted image 20221127133209.png" alt=""><br>“McCandlish, S., Kaplan, J., Amodei, D., and Team, O. D. An empirical model of large-batch training, 2018.” —— 一个评估梯度噪声规模(Gradient Noise Scales)的方法</p>
-<p>基于这个方法，作者团队证明了自己的猜想，并为了消除这些噪声的影响，作者进一步提出假设：<br>是因为在预测时，对扩散时间点$t$的采样，是在$[0, T]$之间的均匀采样而导致的噪声，换一种对$t$的采样方法或许可以解决这个问题。</p>
-<p>于是作者引入了<strong>重要性采样(Importance Sampling)</strong>：</p>
-<script type="math/tex; mode=display">
-L_{\mathrm{vlb}}=E_{t \sim p_t}\left[\frac{L_t}{p_t}\right], \text { where } p_t \propto \sqrt{E\left[L_t^2\right]} \text { and } \sum p_t=1</script><p>其中：$E\left[L_t^2\right]$这个关于损失（时间）平方的函数的期望值是未知的，而且很有可能在训练过程中，因为损失值的变化而实时变动。作者保留了损失项的前(previous)10个数值，并且在训练过程中实时更新这个小列表。<br>训练一开始的前10步还是采用均匀采样，一旦损失项的数值个数超过10，则启用重要性采样。</p>
-<h2 id="2-采样速度"><a href="#2-采样速度" class="headerlink" title="2- 采样速度"></a>2- 采样速度</h2><p>直观上来说，经过了$T$步扩散的数据应该同样地该序列将其还原。不过作者认为，利用一个关于0~$T$的子序列$S$进行对其进行降噪采样也是可行的。</p>
-<p>基于子序列$S$，得到对应的噪声系数$\bar{\alpha}_{S_t}$，这个时候采样就变成了：</p>
-<script type="math/tex; mode=display">
-\beta_{S_t}=1-\frac{\bar{\alpha}_{S_t}}{\bar{\alpha}_{S_{t-1}}}, \quad \tilde{\beta}_{S_t}=\frac{1-\bar{\alpha}_{S_{t-1}}}{1-\bar{\alpha}_{S_t}} \beta_{S_t}</script><p>此时用于预测的含参概率模型就是：</p>
-<script type="math/tex; mode=display">
-p\left(x_{S_{t-1}} \mid x_{S_t}\right) =\mathcal{N}\left(\mu_\theta\left(x_{S_t}, S_t\right), \Sigma_\theta\left(x_{S_t}, S_t\right)\right)</script><h1 id="观点"><a href="#观点" class="headerlink" title="观点"></a>观点</h1><h2 id="1-和GAN对比"><a href="#1-和GAN对比" class="headerlink" title="1- 和GAN对比"></a>1- 和GAN对比</h2><p>GAN一般是用来训练给定分类条件的生成模型(class-conditional models)，</p>
-]]></content>
-      <categories>
-        <category>Paper</category>
-      </categories>
-      <tags>
-        <tag>Diffusion</tag>
-        <tag>Generative Model</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model)</title>
     <url>/2022/10/17/Multiscale%20complexity%20fluctuation%20behaviours%20of%20stochastic%20interacting%20cryptocurrency%20price%20model/</url>
     <content><![CDATA[<p>【随机接触模型】建模的【加密货币价格模型】中的【多尺度】【复杂】【波动】【行为】<br>作者：Zhiyong Zheng, Yunfan Lu, Junhuan Zhang<br>文章：<a href="https://www-sciencedirect-com.libezproxy.must.edu.mo/science/article/pii/S0378437122000528?casa_token=hmttd1BwfH8AAAAA:8jXXld71BYJ0PYHU3TWzRUvWyrfi2VqYoW3XZozBNv8LUP6A_HvHvXPEQraq-3BJODue88bD0Bfe">Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model</a></p>
@@ -184,6 +140,95 @@ E_{i+}+d_{i+}, & \text { if } m_1+m_1^{\prime}=0
       </tags>
   </entry>
   <entry>
+    <title>Improved DDPM</title>
+    <url>/2022/11/27/Improved%20Denoising%20Diffusion%20Probabilistic%20Models/</url>
+    <content><![CDATA[<p>对DDPM进行改进<br>原文：<a href="http://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf">戳我</a><br>作者：Alex Nichol, Prafulla Dhariwal</p>
+<h1 id="Improvement"><a href="#Improvement" class="headerlink" title="Improvement"></a>Improvement</h1><h2 id="1-对数似然估计"><a href="#1-对数似然估计" class="headerlink" title="1- 对数似然估计"></a>1- 对数似然估计</h2><p>“Razavi, A., van den Oord, A., and Vinyals, O. Generating diverse high-fidelity images with vq-vae-2, 2019.” —— 对对数似然进行估计的优化过程，可以迫使生成模型获取原始数据所有的特征分布。</p>
+<p>“Henighan, T., Kaplan, J., Katz, M., Chen, M., Hesse, C., Jackson, J., Jun, H., Brown, T. B., Dhariwal, P., Gray, S., Hallacy, C., Mann, B., Radford, A., Ramesh, A., Ryder,N., Ziegler, D. M., Schulman, J., Amodei, D., and McCandlish, S. Scaling laws for autoregressive generative modeling, 2020.” —— 在对对数似然上进行微小的提升就可以大幅度提高采样的质量。</p>
+<p>因此：很有必要思考怎样让DDPM在对对数似然的优化更进一步。<br>前期的实验结果发现，把扩散步数$T$增加可以有效提高对数似然的效果。<br>    $T$从1000提高到4000，对数似然提高到3.77</p>
+<h3 id="1-1-对协方差进行预测"><a href="#1-1-对协方差进行预测" class="headerlink" title="1.1- 对协方差进行预测"></a>1.1- 对协方差进行预测</h3><p>DDPM降噪采样时的方差是固定的，固定为：$\Sigma_\theta\left(x_t, t\right)=\sigma_t^2 I$，并且固定$\sigma_t = \beta_t$<br><img src="/images/iddpm/Pasted image 20221127124438.png" alt=""><br>但是很奇怪的是，在降噪的采样实验中，不论是让$\sigma_t = \beta_t$还是让$\sigma_t = \tilde{\beta}_t$，采样的质量差不多。难道是方差其实根本不是决定采样质量的变量？<br>    补充：$\tilde{\beta}_t:=\frac{1-\bar{\alpha}_{t-1}}{1-\bar{\alpha}_t} \beta_t$，$\bar{\alpha}_t:=\prod_{s=0}^t \alpha_s$，$\alpha_t:=1-\beta_t$<br>为了验证这个猜想作者绘制了上图，并发现在扩散进度$t=0$的位置，$\beta_t$和$\tilde{\beta}_t$几乎一致。这说明在有限的扩散步数之内，方差$\sigma_t$不一定和采样质量之间存在关联。</p>
+<p>换句话说就是，我们在添加更多的扩散步数之后，<em>采样质量的高低更多的还是与降噪采样的均值相关</em>。</p>
+<p>同时该图也表明<strong>协方差的合理范围（$\beta$ ~ $\tilde{\beta}$ ）是很小的</strong>，如果利用神经网络直接对其进行预测的话，需要这个神经网络达到相当高程度的精度，这对现有的神经网络来说还是不太好实现的。</p>
+<p>所以说可以转换一个思路，让神经网络去预测一个参数，让参数规划出来的数值落在$\beta$ ~ $\tilde{\beta}$ 之间，这样神经网络就可以更好训练了。</p>
+<script type="math/tex; mode=display">
+\Sigma_\theta\left(x_t, t\right)=\exp \left(v \log \beta_t+(1-v) \log \tilde{\beta}_t\right)</script><p>并且在对$v$进行预测的过程中，作者并没有为其增加什么约束，理论上这可能让最后的协方差超过预期的范围，不过实践中这种情况这并没有发生过，可以假定应该是这个神经网络的定义方式本身已经对其数值的上下界有了一定的约束。</p>
+<p><img src="/images/iddpm/Pasted image 20221127125740.png" alt=""><br>不过与此同时，上图的实验也证明，在扩散过程的前几步对最小化变分下界(Variational Lower BOund)而言是效用最高的。因此我们仍然可以说，协方差的选择是和训练效果、采样效果相关的。</p>
+<p>基于上述两个特殊的实验，在重新把协方差纳入考量之后，为了最大化利用协方差和效果的相关性，训练的优化目标也进一步发生改变：</p>
+<script type="math/tex; mode=display">
+L_{\text {hybrid }}=L_{\text {simple }}+\lambda L_{\mathrm{vlb}}</script><p>这里$\lambda=1e-3$</p>
+<h3 id="1-2-对噪声数据更好地进行规划"><a href="#1-2-对噪声数据更好地进行规划" class="headerlink" title="1.2- 对噪声数据更好地进行规划"></a>1.2- 对噪声数据更好地进行规划</h3><p><img src="/images/iddpm/Pasted image 20221127131446.png" alt=""><br>在DDPM中，数值从小到大，噪声的规划是线性的，但是作者发现，这种线性递增的噪音其实很有可能扩散到一半的时候，就让数据完全服从高斯分布了（上），再后面的噪声添加已经对采样、对训练没有任何意义。</p>
+<p><img src="/images/iddpm/Pasted image 20221127131521.png" alt=""><br><img src="/images/iddpm/Pasted image 20221127131849.png" alt=""><br>所以作者提出了cos噪声规划方法，使得噪声添加的量呈非线性，同时在cos噪声规划的情况下$\bar{\alpha}_t$的变化更为线性而平缓，可以有效防止数据在中途某一步突然被添加大量噪声，因此降低神经网络的训练难度，理论上一定程度提高了训练效果。</p>
+<h4 id="Cosine噪声规划"><a href="#Cosine噪声规划" class="headerlink" title="Cosine噪声规划"></a>Cosine噪声规划</h4><p>公式：</p>
+<script type="math/tex; mode=display">
+\bar{\alpha}_t=\frac{f(t)}{f(0)}, \quad f(t)=\cos \left(\frac{t / T+s}{1+s} \cdot \frac{\pi}{2}\right)^2</script><p>这种规划方法利用$s$替换了原本DDPM的噪声参数$\beta$，防止其在靠近$t=0$的时候过小，这也是因为作者团队在上述研究的发现：<br>在刚开始扩散的时候效果其实是最好的，这个时候如果噪声数量过少，不利于神经网络对噪声$\epsilon$的预测。</p>
+<p>$s=8e-3$<br>作者团队选择$\cos^2(\cdot)$的形式是因为这个函数的形状是符合作者团队对噪声规划的预期的，同时这也是一个数学中常见的函数。当然这里也可以选择其他的函数，具体什么函数更好就看后人的工作了。<br><img src="/images/iddpm/Pasted image 20221127135032.png" alt=""></p>
+<h3 id="1-3-降低梯度数据中的噪声"><a href="#1-3-降低梯度数据中的噪声" class="headerlink" title="1.3- 降低梯度数据中的噪声"></a>1.3- 降低梯度数据中的噪声</h3><p><img src="/images/iddpm/Pasted image 20221127133001.png" alt=""><br>在1.1中，对目标引入了$L_{vlb}$，但是作者也发现关于这个目标的优化实在是有点困难。上图表明$L_{hybrid}$的效果好于$L_{vlb}$，作者基于此假设：<br>$L_{vlb}$在训练时的梯度相比于$L_{hybrid}$而言，噪声更多。</p>
+<p><img src="/images/iddpm/Pasted image 20221127133209.png" alt=""><br>“McCandlish, S., Kaplan, J., Amodei, D., and Team, O. D. An empirical model of large-batch training, 2018.” —— 一个评估梯度噪声规模(Gradient Noise Scales)的方法</p>
+<p>基于这个方法，作者团队证明了自己的猜想，并为了消除这些噪声的影响，作者进一步提出假设：<br>是因为在预测时，对扩散时间点$t$的采样，是在$[0, T]$之间的均匀采样而导致的噪声，换一种对$t$的采样方法或许可以解决这个问题。</p>
+<p>于是作者引入了<strong>重要性采样(Importance Sampling)</strong>：</p>
+<script type="math/tex; mode=display">
+L_{\mathrm{vlb}}=E_{t \sim p_t}\left[\frac{L_t}{p_t}\right], \text { where } p_t \propto \sqrt{E\left[L_t^2\right]} \text { and } \sum p_t=1</script><p>其中：$E\left[L_t^2\right]$这个关于损失（时间）平方的函数的期望值是未知的，而且很有可能在训练过程中，因为损失值的变化而实时变动。作者保留了损失项的前(previous)10个数值，并且在训练过程中实时更新这个小列表。<br>训练一开始的前10步还是采用均匀采样，一旦损失项的数值个数超过10，则启用重要性采样。</p>
+<h2 id="2-采样速度"><a href="#2-采样速度" class="headerlink" title="2- 采样速度"></a>2- 采样速度</h2><p>直观上来说，经过了$T$步扩散的数据应该同样地该序列将其还原。不过作者认为，利用一个关于0~$T$的子序列$S$进行对其进行降噪采样也是可行的。</p>
+<p>基于子序列$S$，得到对应的噪声系数$\bar{\alpha}_{S_t}$，这个时候采样就变成了：</p>
+<script type="math/tex; mode=display">
+\beta_{S_t}=1-\frac{\bar{\alpha}_{S_t}}{\bar{\alpha}_{S_{t-1}}}, \quad \tilde{\beta}_{S_t}=\frac{1-\bar{\alpha}_{S_{t-1}}}{1-\bar{\alpha}_{S_t}} \beta_{S_t}</script><p>此时用于预测的含参概率模型就是：</p>
+<script type="math/tex; mode=display">
+p\left(x_{S_{t-1}} \mid x_{S_t}\right) =\mathcal{N}\left(\mu_\theta\left(x_{S_t}, S_t\right), \Sigma_\theta\left(x_{S_t}, S_t\right)\right)</script><h1 id="观点"><a href="#观点" class="headerlink" title="观点"></a>观点</h1><h2 id="1-和GAN对比"><a href="#1-和GAN对比" class="headerlink" title="1- 和GAN对比"></a>1- 和GAN对比</h2><p>GAN一般是用来训练给定分类条件的生成模型(class-conditional models)，</p>
+]]></content>
+      <categories>
+        <category>Paper</category>
+      </categories>
+      <tags>
+        <tag>Diffusion</tag>
+        <tag>Generative Model</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>TS2Vec：一种更普适的时序数据表征方式</title>
+    <url>/2023/01/02/TS2Vec%20Towards%20Universal%20Representation%20of%20Time%20Series/</url>
+    <content><![CDATA[<p>作者：Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu<br>原文：<a href="https://arxiv.org/abs/2106.10466">戳我</a><br>代码：<a href="https://github.com/yuezhihan/ts2vec">戳戳我</a></p>
+<h1 id="一、核心看点"><a href="#一、核心看点" class="headerlink" title="一、核心看点"></a>一、核心看点</h1><ul>
+<li>利用一种<strong>多层对比学习</strong>的方法，为时序数据中每一个时间点提供一个更为好用的上下文表征方法。</li>
+<li>通过在时间点上执行一个简洁的数据聚合方法，使得在时序数据中的<strong>任意一个子序列</strong>都可以被表征。</li>
+</ul>
+<h1 id="二、研究动机"><a href="#二、研究动机" class="headerlink" title="二、研究动机"></a>二、研究动机</h1><ul>
+<li>实例层级（Instance-level）的表征方法可能没有办法很好注入时序预测、异常检测之类的适配细粒度（fine-grained）的任务。</li>
+<li>针对现有各种的表征方法中，在表征某一个时间点的上下文(contextual)信息时，上下文的覆盖范围不够灵活，窗口大小相对固定。<ul>
+<li>多尺度的表征方法可以提高其泛化性，使其对更多的下游任务都能适配。</li>
+</ul>
+</li>
+<li>目前针对时序数据的无监督式表征学习方法，大部分都是从cv或者nlp领域照搬过来的。</li>
+</ul>
+<h1 id="三、问题建模"><a href="#三、问题建模" class="headerlink" title="三、问题建模"></a>三、问题建模</h1><p>对包含 $N$ 个实例的时序数据 $\mathcal{X}=\left\{x_1, x_2, \cdots, x_N\right\}, x_i \in \mathbb{R}^{T \times F}$ ( $T$ 表示的是序列长度， $F$ 表示的是特征维度)，构建一个非线性的嵌入(embedding)映射，将每一个 $x_i$ 映射成对应的表征量 $r_i$ 。<br>针对第i个实例 $x_i$ ，经过嵌入映射后得到的其表征向量写作$r_i=\left\{r_{i, 1}, r_{i, 2}, \cdots, r_{i, T}\right\}, r_{i, t} \in \mathbb{R}^K$，此处 $K$ 表示的是用户自定义的嵌入维度。</p>
+<h1 id="四、模型概览"><a href="#四、模型概览" class="headerlink" title="四、模型概览"></a>四、模型概览</h1><p><img src="/images/ts2vec/Pasted image 20230104155411.png" alt=""></p>
+<ol>
+<li>针对第 $i$ 个实例 $x_i$， 从里面随机选取<strong>一对</strong>在时间维度上相交的子序列（ $a_1$ , $b_1$）和 ( $a_2$, $b_2$ )<br> 两序列在( $a_2$ , $b_1$ )段重合<br> $0&lt;a_1 \leq a_2 \leq b_1 \leq b_2 \leq T$<br> 两个子序列相交的原因：方便检验该方法在两个子序列上，其相交部分的上下文表征具备一致性。</li>
+<li>这两段子序列都会被输入一个编码器（<em>encoder</em>）。<br> 该编码器利用 <strong>contrastive loss</strong> 和 <strong>instance-wise contrastive loss</strong> 进行共同训练。<br> 编码器分为三层：<ol>
+<li>输入映射层( <em>Input Projection Layer</em>)<br> 将 $x_{i, t}$ 映射为隐变量 $z_{i, t}$ ，后者的维度将高于前者<br> 模型：全连接层</li>
+<li>时间点掩码层( <em>Timestamp Masking</em> )<br> 对隐变量$z_{i, t}$ ，随机选取时间点进行遮掩。下图打问号的部分就是被掩码遮蔽的区域。<br> 对于一对子序列，这段操作就是在它们的相交部分，选择一段时间的数据进行单向、双向的遮蔽，并检查这两段子序列的嵌入向量，在这个遮掩区域的表征是否一致。<br> 数学表达： $m \in\{0,1\}^T$<br> 选取方法：在 $p=0.5$ 的伯努利分布上采样<br> <img src="/images/ts2vec/Pasted image 20230104170806.png" alt=""></li>
+<li>扩张卷积层 ( <em>Dilated Convolution</em> )<br> 对每个时间点抽取其上下文特征<br> 模型：10个res blocks，每一个res block包含两个1D卷积层</li>
+</ol>
+</li>
+<li><p>进行多层级的对比( <em>Hierarchical Contrasting</em> )<br> 对于同一个实例 $x_i$， 在时间点 $t$ 上，选取用于表征它的、数值不同的两个嵌入向量 $r_{i, t}$ 与 $r^\prime_{i, t}$ 。<br> 计算其<strong>时间维度</strong>上的表征差异：</p>
+<script type="math/tex; mode=display">
+\ell_{t e m p}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{t^{\prime} \in \Omega}\left(\exp \left(r_{i, t} \cdot r_{i, t^{\prime}}^{\prime}\right)+\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)\right)}</script><p> 其中：$\Omega$ 表征的是这对子序列相交的那一部分数据对应的时间段。<br> $\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)$ 表示当 $t \neq t^{\prime}$ 时，才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 再计算<strong>整体</strong>上二者的表征差异：</p>
+<script type="math/tex; mode=display">
+\ell_{i n s t}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{j=1}^B\left(\exp \left(r_{i, t} \cdot r_{j, t}^{\prime}\right)+\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)\right)}</script><p> 其中： $B$ 表征的是一个训练批次的大小（batch size）。<br> $\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)$ 表示当 $i \neq j$ 的时候才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 将这两者聚合：</p>
+<script type="math/tex; mode=display">
+\mathcal{L}_{d u a l}(r_{i, t} , r^\prime_{i, t})=\frac{1}{N T} \sum_i \sum_t\left(\ell_{t e m p}^{(i, t)}+\ell_{i n s t}^{(i, t)}\right)</script><p> 再利用maxpooling技术，不断压缩这对子序列数据，再在压缩了的数据上执行对比计算，直到子序列的长度被压缩为1.<br><img src="/images/ts2vec/Pasted image 20230104220210.png" alt=""></p>
+</li>
+</ol>
+]]></content>
+      <categories>
+        <category>Paper</category>
+      </categories>
+      <tags>
+        <tag>CNN</tag>
+        <tag>Representation Learning</tag>
+        <tag>Time Series</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>基于分数(score-based)的扩散(Diffusion)模型</title>
     <url>/2022/10/17/Score-based%20Diffusion%20Model/</url>
     <content><![CDATA[<p>基于分数的的扩散模型，<br>原文章：<a href="https://arxiv.org/abs/2011.13456">Score-Based Generative Modeling through Stochastic Differential Equations</a></p>
@@ -314,6 +359,40 @@ f_t=\frac{d}{d t}\left(\ln \bar{\alpha}_t\right)=\frac{1}{\bar{\alpha}_t} \frac{
       </tags>
   </entry>
   <entry>
+    <title>戒烟手记</title>
+    <url>/2023/01/05/%E6%88%92%E7%83%9F%E6%89%8B%E8%AE%B0/</url>
+    <content><![CDATA[<p>前几日我骤然觉得自己的健康情况堪忧，肺活量菲律宾跳水式下降，随便走两步上个楼梯能喘到四脚朝天，加之近日以及将来的工作强度只高不低，如果由着工作压力让自己从烟枪进化成烟鬼，怕是自己之后再难以与烟脱开关系，遂下定决心，把这烟给他妈戒了。</p>
+<p>最开始的3日</p>
+<p>这三天属实是顶上加顶，五年烟龄说长不长但也说短不短，身体似乎已经是有了肌肉记忆——一早从床上撑着起来时，抑或是刚刚饱餐了一顿后，会下意识的摸一摸口袋，想着直接掏出一根烟吞云吐雾，快意个四五分钟。因此，我在工作时段几乎每半个小时就会有一次强烈的戒断反应，像是有一只无形的手在你的肺部，伸出它这修长又柔软的手指，从肺管伸向咽喉，反复从上至下地摩梭，不停模拟着昔日充满一氧化碳、尼古丁和焦油的烟雾冲击喉咙的感受。随之而来的时胸口若有若无的压迫感，两个肺叶就好像紧紧相拥在了一起，不停地暗示你用某种气味强烈气体注入其中，才能给你打开运输氧气的通道。这最初的两种戒断反应反复出现，疯狂分散你的注意力，此时最好的办法：</p>
+<p>1、嚼上一颗你能找到的，薄荷劲儿最大的口香糖，这种薄荷的气味可以很大程度上模拟烟草的击喉感，帮助缓解这种难以忍受的感觉。</p>
+<p>2、随步骤1，进行深呼吸，将薄荷的气味带到最深处，以期最大程度模拟烟草的感觉。</p>
+<p>先写这些，有后续再更新，愿我成功。</p>
+<p>————————昏割线——————————</p>
+<p>当你熬过前三日</p>
+<p>卯足劲地，我是把前三日给熬掉了。欣喜异常的我内心已经是敲锣打鼓了，一是我从未戒烟超过2天，这已经扩展自己的自制力边界了，二是我天真的认为，戒断反应不过如此，戒烟指日可待，不受尼古丁约束的美好生活正在朝我走来。</p>
+<p>但是！！！</p>
+<p>前三天那个算个啥啊，后面才是真正的快乐，为啥戒烟难，为啥戒烟成功率这么低，这几天我才是深有体会。</p>
+<p><strong>1- 手脚时不时的发麻</strong></p>
+<p>要怎样描述这种感觉呢，还是用场景说话吧。<br>场景一：办公座位上<br>我用电脑搁那打字整理信息呢，在不经意间发现指尖的触觉出现了一些偏差。因为自己现在在打字的时候，自己对键盘上G J两个键上的凸起的触觉反馈，没有那么灵敏了，同时自己的胳膊也有在慢慢被卸力的感觉，。最直观的后果就是，我发现自己打出来的拼音出现了极多错误，错误率相较平时高出将近五成，很大程度影响自己工作效率。<br>场景二：坐车上<br>这个感觉就更明显了，我会在玩完手机回过神来的时候，缓缓觉察自己脚趾和袜子指尖的摩擦感十分微弱，整个脚也像便便完直接站起来一样，酸酸麻麻的，相当不得劲，以至于需要我站起来下车的时候都会力不从心，完全不似二十几的青年人。</p>
+<p><strong>2- 头痛</strong></p>
+<p>通常伴随症状1同时出现，不过也不是常规意义的疼痛，具体一点描述就是有一种直冲天灵盖的眩晕感，附带脑壳略微酸胀，查阅资料得知是骤然摆脱一氧化碳所致。</p>
+<p><strong>3- 距离感与空间感短时障碍</strong></p>
+<p>这个可就有的说道了，有一回同样的情形，我还在快乐地编辑文档中，想去拿边上泡好的茶水嘬上一口，结果却发现自己抓了个寂寞，就这么小的空间，我竟然能将水杯与我的距离判断错。刚想暗骂自己是蠢b的时候，我回神一看键盘，突然发现自己恍惚间竟不知道该将手伸出多长才能放在键盘上。此时我顾不得什么了，直接强制自己走出办公室，走到室外去，感受着夏季仅40度出头的宜人天气，轻轻闭上双眼做了七八个深呼吸，再踱步回自己的工位，这才好了不少。</p>
+<p>其它的还有待自己细细体会，自己造的孽自己一点点补上。</p>
+<p> ————————昏割线——————————</p>
+<p>现在基本熬过了戒断时期，不抽烟不用任何尼古丁替代物也不会有太大的反应啦，基本算是成功一半了，蛤啤！<br>说起戒烟很大情况是一个心态的转变，总觉得如果自己一旦开始了焦虑就应当抽烟，就应当用烟草缓解自己此时此刻的苦楚。但是转念一想为什么自己会想在这种时候抽烟，是因为烟已经和焦虑以及烦躁产生的关联，不抽烟时短暂的戒断反应是这种负面情绪最佳的温床与催化剂。</p>
+<p>可能像上面这么描述比较抽象，就举个例子吧。<br> 你抽烟时候得到的愉悦感觉，就比较像你损友在你的授意下送了你10块钱的礼物一样，令你有一种掌控自我的自信以及相伴而来的快感。但这礼物是有前提的，每当你授意这位损友送你这份礼物的时候，他会先问你借30块，作为你抽烟付出的经济以及健康，外加你不抽烟时带来的轻微戒断反应等一类的负面影响，也即你每收获一份来自友谊的感动，你都需要净付出20元的经济成本。<br> 但很微妙的就是，我们只记住了收到10块钱礼物的快乐以及对损友的感激，忘了损友向你要钱时的反感以及不适，于我而言这是戒烟最难的一道心里转变，我们的心里总更倾向铭记压力被缓释的那一刻，忘了自己身体在没有尼古丁时的抓心挠肝。</p>
+<p> 每每自己想抽烟就在自己脑内重复一遍这个比喻，长痛不如短痛，我可能无法血赚，但我绝对要对血亏说去你妈的，况且这种血亏其实是可控的。</p>
+<p>  关于戒烟的时机，我个人很不建议在工作压力大的时候硬戒，如我上述，戒断反应+社会的毒打，这种双倍的恶心不是人该经受的，也会极大提高复吸概率。。尽可能找一段清闲一些的日子，开始戒烟计划。<br> 同时，也不要对自己的复吸有太大的负罪感，有些东西扛住了光荣，扛不住，也光荣。 </p>
+]]></content>
+      <categories>
+        <category>Diary</category>
+      </categories>
+      <tags>
+        <tag>Life</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>用统一的连贯视角，解析扩散模型</title>
     <url>/2022/10/28/Understanding%20Diffusion%20Models%20A%20Unified%20Perspective/</url>
     <content><![CDATA[<p>原文：<a href="https://arxiv.org/abs/2208.11970">戳我</a><br>作者： Calvin Luo</p>
@@ -361,51 +440,6 @@ f_t=\frac{d}{d t}\left(\ln \bar{\alpha}_t\right)=\frac{1}{\bar{\alpha}_t} \frac{
       <tags>
         <tag>Diffusion</tag>
         <tag>Generative Model</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>TS2Vec：一种更普适的时序数据表征方式</title>
-    <url>/2023/01/02/TS2Vec%20Towards%20Universal%20Representation%20of%20Time%20Series/</url>
-    <content><![CDATA[<p>作者：Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu<br>原文：<a href="https://arxiv.org/abs/2106.10466">戳我</a><br>代码：<a href="https://github.com/yuezhihan/ts2vec">戳戳我</a></p>
-<h1 id="一、核心看点"><a href="#一、核心看点" class="headerlink" title="一、核心看点"></a>一、核心看点</h1><ul>
-<li>利用一种<strong>多层对比学习</strong>的方法，为时序数据中每一个时间点提供一个更为好用的上下文表征方法。</li>
-<li>通过在时间点上执行一个简洁的数据聚合方法，使得在时序数据中的<strong>任意一个子序列</strong>都可以被表征。</li>
-</ul>
-<h1 id="二、研究动机"><a href="#二、研究动机" class="headerlink" title="二、研究动机"></a>二、研究动机</h1><ul>
-<li>实例层级（Instance-level）的表征方法可能没有办法很好注入时序预测、异常检测之类的适配细粒度（fine-grained）的任务。</li>
-<li>针对现有各种的表征方法中，在表征某一个时间点的上下文(contextual)信息时，上下文的覆盖范围不够灵活，窗口大小相对固定。<ul>
-<li>多尺度的表征方法可以提高其泛化性，使其对更多的下游任务都能适配。</li>
-</ul>
-</li>
-<li>目前针对时序数据的无监督式表征学习方法，大部分都是从cv或者nlp领域照搬过来的。</li>
-</ul>
-<h1 id="三、问题建模"><a href="#三、问题建模" class="headerlink" title="三、问题建模"></a>三、问题建模</h1><p>对包含 $N$ 个实例的时序数据 $\mathcal{X}=\left\{x_1, x_2, \cdots, x_N\right\}, x_i \in \mathbb{R}^{T \times F}$ ( $T$ 表示的是序列长度， $F$ 表示的是特征维度)，构建一个非线性的嵌入(embedding)映射，将每一个 $x_i$ 映射成对应的表征量 $r_i$ 。<br>针对第i个实例 $x_i$ ，经过嵌入映射后得到的其表征向量写作$r_i=\left\{r_{i, 1}, r_{i, 2}, \cdots, r_{i, T}\right\}, r_{i, t} \in \mathbb{R}^K$，此处 $K$ 表示的是用户自定义的嵌入维度。</p>
-<h1 id="四、模型概览"><a href="#四、模型概览" class="headerlink" title="四、模型概览"></a>四、模型概览</h1><p><img src="/images/ts2vec/Pasted image 20230104155411.png" alt=""></p>
-<ol>
-<li>针对第 $i$ 个实例 $x_i$， 从里面随机选取<strong>一对</strong>在时间维度上相交的子序列（ $a_1$ , $b_1$）和 ( $a_2$, $b_2$ )<br> 两序列在( $a_2$ , $b_1$ )段重合<br> $0&lt;a_1 \leq a_2 \leq b_1 \leq b_2 \leq T$<br> 两个子序列相交的原因：方便检验该方法在两个子序列上，其相交部分的上下文表征具备一致性。</li>
-<li>这两段子序列都会被输入一个编码器（<em>encoder</em>）。<br> 该编码器利用 <strong>contrastive loss</strong> 和 <strong>instance-wise contrastive loss</strong> 进行共同训练。<br> 编码器分为三层：<ol>
-<li>输入映射层( <em>Input Projection Layer</em>)<br> 将 $x_{i, t}$ 映射为隐变量 $z_{i, t}$ ，后者的维度将高于前者<br> 模型：全连接层</li>
-<li>时间点掩码层( <em>Timestamp Masking</em> )<br> 对隐变量$z_{i, t}$ ，随机选取时间点进行遮掩。下图打问号的部分就是被掩码遮蔽的区域。<br> 对于一对子序列，这段操作就是在它们的相交部分，选择一段时间的数据进行单向、双向的遮蔽，并检查这两段子序列的嵌入向量，在这个遮掩区域的表征是否一致。<br> 数学表达： $m \in\{0,1\}^T$<br> 选取方法：在 $p=0.5$ 的伯努利分布上采样<br> <img src="/images/ts2vec/Pasted image 20230104170806.png" alt=""></li>
-<li>扩张卷积层 ( <em>Dilated Convolution</em> )<br> 对每个时间点抽取其上下文特征<br> 模型：10个res blocks，每一个res block包含两个1D卷积层</li>
-</ol>
-</li>
-<li><p>进行多层级的对比( <em>Hierarchical Contrasting</em> )<br> 对于同一个实例 $x_i$， 在时间点 $t$ 上，选取用于表征它的、数值不同的两个嵌入向量 $r_{i, t}$ 与 $r^\prime_{i, t}$ 。<br> 计算其<strong>时间维度</strong>上的表征差异：</p>
-<script type="math/tex; mode=display">
-\ell_{t e m p}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{t^{\prime} \in \Omega}\left(\exp \left(r_{i, t} \cdot r_{i, t^{\prime}}^{\prime}\right)+\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)\right)}</script><p> 其中：$\Omega$ 表征的是这对子序列相交的那一部分数据对应的时间段。<br> $\mathbb{1}_{\left[t \neq t^{\prime}\right]} \exp \left(r_{i, t} \cdot r_{i, t^{\prime}}\right)$ 表示当 $t \neq t^{\prime}$ 时，才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 再计算<strong>整体</strong>上二者的表征差异：</p>
-<script type="math/tex; mode=display">
-\ell_{i n s t}^{(i, t)}=-\log \frac{\exp \left(r_{i, t} \cdot r_{i, t}^{\prime}\right)}{\sum_{j=1}^B\left(\exp \left(r_{i, t} \cdot r_{j, t}^{\prime}\right)+\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)\right)}</script><p> 其中： $B$ 表征的是一个训练批次的大小（batch size）。<br> $\mathbb{1}_{[i \neq j]} \exp \left(r_{i, t} \cdot r_{j, t}\right)$ 表示当 $i \neq j$ 的时候才去计算 $\exp (r_{i, t} \cdot r_{i, t^{\prime}})$<br> 将这两者聚合：</p>
-<script type="math/tex; mode=display">
-\mathcal{L}_{d u a l}(r_{i, t} , r^\prime_{i, t})=\frac{1}{N T} \sum_i \sum_t\left(\ell_{t e m p}^{(i, t)}+\ell_{i n s t}^{(i, t)}\right)</script><p> 再利用maxpooling技术，不断压缩这对子序列数据，再在压缩了的数据上执行对比计算，直到子序列的长度被压缩为1.<br><img src="/images/ts2vec/Pasted image 20230104220210.png" alt=""></p>
-</li>
-</ol>
-]]></content>
-      <categories>
-        <category>Paper</category>
-      </categories>
-      <tags>
-        <tag>CNN</tag>
-        <tag>Representation Learning</tag>
-        <tag>Time Series</tag>
       </tags>
   </entry>
 </search>
