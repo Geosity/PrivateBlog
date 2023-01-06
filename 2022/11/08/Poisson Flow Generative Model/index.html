@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 6.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+  <link rel="mask-icon" href="/images/favicon.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"ayresephemeres.top","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="【未完待续】从万有引力的角度，理解扩散生成模型中的常微分方程建模的意义，并对Poisson流生成模型进行解析，期冀可以为扩散模型提供一个更为坚实的理论基础，同时更便于理解。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="泊松流(Poisson Flow)生成模型">
+<meta property="og:url" content="https://ayresephemeres.top/2022/11/08/Poisson%20Flow%20Generative%20Model/index.html">
+<meta property="og:site_name" content="Dit moi, la petit ephémère">
+<meta property="og:description" content="【未完待续】从万有引力的角度，理解扩散生成模型中的常微分方程建模的意义，并对Poisson流生成模型进行解析，期冀可以为扩散模型提供一个更为坚实的理论基础，同时更便于理解。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://spaces.ac.cn/usr/uploads/2022/10/3097555639.svg">
+<meta property="og:image" content="https://spaces.ac.cn/usr/uploads/2022/10/1214065996.svg">
+<meta property="og:image" content="https://spaces.ac.cn/usr/uploads/2022/10/1113525710.svg">
+<meta property="article:published_time" content="2022-11-08T09:22:43.154Z">
+<meta property="article:modified_time" content="2023-01-06T08:27:49.614Z">
+<meta property="article:author" content="Ayres Guan">
+<meta property="article:tag" content="Diffusion">
+<meta property="article:tag" content="Generative Model">
+<meta property="article:tag" content="Ordinary Differential Equation">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://spaces.ac.cn/usr/uploads/2022/10/3097555639.svg">
+
+<link rel="canonical" href="https://ayresephemeres.top/2022/11/08/Poisson%20Flow%20Generative%20Model/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>泊松流(Poisson Flow)生成模型 | Dit moi, la petit ephémère</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Dit moi, la petit ephémère</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">Qui nous laisse espérer le ciel, et nous attache à des pierres</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+  <div class="reading-progress-bar"></div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://ayresephemeres.top/2022/11/08/Poisson%20Flow%20Generative%20Model/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.png">
+      <meta itemprop="name" content="Ayres Guan">
+      <meta itemprop="description" content="文理齐蓄，兼容并包。">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Dit moi, la petit ephémère">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          泊松流(Poisson Flow)生成模型
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-11-08 17:22:43" itemprop="dateCreated datePublished" datetime="2022-11-08T17:22:43+08:00">2022-11-08</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-01-06 16:27:49" itemprop="dateModified" datetime="2023-01-06T16:27:49+08:00">2023-01-06</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI-Model/" itemprop="url" rel="index"><span itemprop="name">AI Model</span></a>
+                </span>
+            </span>
+
+          
+            <div class="post-description">【未完待续】从万有引力的角度，理解扩散生成模型中的常微分方程建模的意义，并对Poisson流生成模型进行解析，期冀可以为扩散模型提供一个更为坚实的理论基础，同时更便于理解。</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>泊松流生成模型<br>原文：<a target="_blank" rel="noopener" href="https://arxiv.org/abs/2209.11178">戳我</a><br>作者：Yilun Xu, Ziming Liu, Max Tegmark, Tommi Jaakkola</p>
+<h1 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h1><h2 id="万有引力到生成模型"><a href="#万有引力到生成模型" class="headerlink" title="万有引力到生成模型"></a>万有引力到生成模型</h2><p>描述： 两个质点彼此之间相互吸引的作用力，是与它们的质量乘积成正比，并与它们之间的距离成平方反比。<br>忽略质量以及万有引力常数的情况下，只观察万有引力这个力和<strong>方向</strong>、<strong>距离</strong>的关系的话，若存在引力源$y$，物体在$x$位置，围绕这二者的三维空间下的引力场可以被数学语言描述为：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{F}(\boldsymbol{x})=-\frac{1}{4 \pi} \frac{\boldsymbol{x}-\boldsymbol{y}}{\|\boldsymbol{x}-\boldsymbol{y}\|^3}</script><p>将引力场拓展到$d$维：</p>
+<script type="math/tex; mode=display">
+\boldsymbol{F}(\boldsymbol{x})=-\frac{1}{S_d(1)} \frac{\boldsymbol{x}-\boldsymbol{y}}{\|\boldsymbol{x}-\boldsymbol{y}\|^d}</script><p>其中 $S_d(1)$ 是 $d$ 维单位超球面的表面积。该式实际上就是 $d$ 维Poisson方程的格林函数的梯度, 这也就是 论文标题中的“Poisson”一词的来源。</p>
+<p>再将引力源的数目进行扩展可以得到如下图所示的引力场：<br><img src="https://spaces.ac.cn/usr/uploads/2022/10/3097555639.svg" alt="引力场示意图"><br>基于这个引力场的示意图，我们总结出这么一个规律：<br><em>除了极少数场线外，大部分场线都是从远处出发，终止于某个引力源点。</em></p>
+<p>将这个规律类比到生成模型的模型构筑中，将每个引力源都比做一个亟待生成的真实样本点，这个规律就可以写作：<br><em>只要引导噪声数据按照场线运动，就可以将噪声引导到引力源的位置，也即真实样本点的位置</em></p>
+<p>上述从天体物理的模型到生成模型的模型迁移十分天才，但是要想让生成模型运作起来需要再解决这些疑问：</p>
+<ul>
+<li>远处指的是多远 - 噪声怎么去定义它的分布，怎样对噪声进行采样？</li>
+<li>引力源的数量和位置怎么确定 - 怎样在这个模型里建模真实数据的分布？</li>
+</ul>
+<h2 id="等效质心"><a href="#等效质心" class="headerlink" title="等效质心"></a>等效质心</h2><p>引力场的等效性质：<em>无穷远处的多源引力场，等价于位于质心、质量叠加的质点引力场。</em><br>也就是将 <strong>“远处”</strong> 定义为 <strong>“无穷远处”</strong> 时，多源引力场的多引力源可以被视作一个<strong>等效质心</strong>，等效质心的质量等于其他引力源质量的叠加。<br><img src="https://spaces.ac.cn/usr/uploads/2022/10/1214065996.svg" alt="多源引力场"><br>![[Pasted image 20221124210435.png]]<br>从上到下就是一个将多源引力场等效为质心引力场的过程。等效完毕之后的质心引力场有了这些优越性：</p>
+<ul>
+<li>在半径足够大的情况下，可以认定所有场线都是均匀穿过了这个以质心为球心的高维球面的。</li>
+<li>在这个高维球面采样就是均匀采样</li>
+</ul>
+<p>但是这也带来了一个问题就是模式坍缩(Mode Collapse)</p>
+<h2 id="模式坍缩"><a href="#模式坍缩" class="headerlink" title="模式坍缩"></a>模式坍缩</h2><p>假设将质心引力场的示意图缩小，根据上面的性质，场线会如下图一样均匀分布在球面上：<br><img src="https://spaces.ac.cn/usr/uploads/2022/10/1113525710.svg" alt="引力源各向同性的引力场"><br>因为场线均匀穿过了球壳进入了球体内部，又因为其均匀性，场线所带来的引力效应将在球内被一一抵消，最终球体内部将不存在引力场，形成一个引力真空。</p>
+<p>对应到生成模型就是，在球壳进行了采样并且由球壳外部的场线给予这个噪声一个初始动量，让其进入球体内部寻找引力源（也就是训练样本的数据的采样点）。但因为球体内部的引力真空，很有可能噪声数据永远无法寻找到引力源，后果就是：</p>
+<ul>
+<li>有些真实样本将永远无法被生成；</li>
+<li>生成结果将不再多样化。</li>
+</ul>
+<p>这个时候在PFGM中提出了一个新方法：<strong>升维</strong><br>假设原本的真实样本$\boldsymbol{x} \in \mathbb{R}^d$，为了升维，引入一个新的维度$t$，从而$(x, t) \in \mathbb{R}^{d+1}$。<br>原本数据的分布是：$\boldsymbol{x} \sim \tilde{p}(\boldsymbol{x})$，升维之后：$(x, t) \sim \delta(t) \tilde{p}(x)$<br>    $\delta(t)$ 是狄拉克分布</p>
+<p>这个时候升维之后的引力场可以被表达为：</p>
+<script type="math/tex; mode=display">
+\begin{aligned}
+\boldsymbol{F}(\boldsymbol{x}, t) &=-\frac{1}{S_{d+1}(1)} \iint \frac{\left(\boldsymbol{x}-\boldsymbol{x}_0, t-t_0\right)}{\left(\left\|\boldsymbol{x}-\boldsymbol{x}_0\right\|^2+\left(t-t_0\right)^2\right)^{(d+1) / 2}} \delta\left(t_0\right) \tilde{p}\left(\boldsymbol{x}_0\right) d \boldsymbol{x}_0 d t_0 \\
+&=-\frac{1}{S_{d+1}(1)} \int \frac{\left(\boldsymbol{x}-\boldsymbol{x}_0, t\right)}{\left(\left\|\boldsymbol{x}-\boldsymbol{x}_0\right\|^2+t^2\right)^{(d+1) / 2}} \tilde{p}\left(\boldsymbol{x}_0\right) d \boldsymbol{x}_0 \\
+& \triangleq\left(\boldsymbol{F}_{\boldsymbol{x}}, \boldsymbol{F}_t\right)
+\end{aligned}</script>
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Diffusion/" rel="tag"># Diffusion</a>
+              <a href="/tags/Generative-Model/" rel="tag"># Generative Model</a>
+              <a href="/tags/Ordinary-Differential-Equation/" rel="tag"># Ordinary Differential Equation</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/10/28/Understanding%20Diffusion%20Models%20A%20Unified%20Perspective/" rel="prev" title="用统一的连贯视角，解析扩散模型">
+      <i class="fa fa-chevron-left"></i> 用统一的连贯视角，解析扩散模型
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/11/17/Diffusion-LM%20Improves%20Controllable%20Text%20Generation/" rel="next" title="可控的生成扩散语言模型">
+      可控的生成扩散语言模型 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E8%83%8C%E6%99%AF"><span class="nav-number">1.</span> <span class="nav-text">背景</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%87%E6%9C%89%E5%BC%95%E5%8A%9B%E5%88%B0%E7%94%9F%E6%88%90%E6%A8%A1%E5%9E%8B"><span class="nav-number">1.1.</span> <span class="nav-text">万有引力到生成模型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AD%89%E6%95%88%E8%B4%A8%E5%BF%83"><span class="nav-number">1.2.</span> <span class="nav-text">等效质心</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%BC%8F%E5%9D%8D%E7%BC%A9"><span class="nav-number">1.3.</span> <span class="nav-text">模式坍缩</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Ayres Guan"
+      src="/images/avatar.png">
+  <p class="site-author-name" itemprop="name">Ayres Guan</p>
+  <div class="site-description" itemprop="description">文理齐蓄，兼容并包。</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">11</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">17</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Geosity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Geosity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:geositty@gmail.com" title="E-Mail → mailto:geositty@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://www.instagram.com/ayresguan.st/" title="Instagram → https:&#x2F;&#x2F;www.instagram.com&#x2F;ayresguan.st&#x2F;" rel="noopener" target="_blank"><i class="fab fa-instagram fa-fw"></i></a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Ayres Guan</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+  <script defer src="/lib/three/three.min.js"></script>
+    <script defer src="/lib/three/three-waves.min.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+      
+
+<script>
+  if (typeof MathJax === 'undefined') {
+    window.MathJax = {
+      loader: {
+        source: {
+          '[tex]/amsCd': '[tex]/amscd',
+          '[tex]/AMScd': '[tex]/amscd'
+        }
+      },
+      tex: {
+        inlineMath: {'[+]': [['$', '$']]},
+        tags: 'ams'
+      },
+      options: {
+        renderActions: {
+          findScript: [10, doc => {
+            document.querySelectorAll('script[type^="math/tex"]').forEach(node => {
+              const display = !!node.type.match(/; *mode=display/);
+              const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display);
+              const text = document.createTextNode('');
+              node.parentNode.replaceChild(text, node);
+              math.start = {node: text, delim: '', n: 0};
+              math.end = {node: text, delim: '', n: 0};
+              doc.math.push(math);
+            });
+          }, '', false],
+          insertedScript: [200, () => {
+            document.querySelectorAll('mjx-container').forEach(node => {
+              let target = node.parentNode;
+              if (target.nodeName.toLowerCase() === 'li') {
+                target.parentNode.classList.add('has-jax');
+              }
+            });
+          }, '', false]
+        }
+      }
+    };
+    (function () {
+      var script = document.createElement('script');
+      script.src = '//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+      script.defer = true;
+      document.head.appendChild(script);
+    })();
+  } else {
+    MathJax.startup.document.state(0);
+    MathJax.texReset();
+    MathJax.typeset();
+  }
+</script>
+
+    
+
+  
+
+</body>
+</html>

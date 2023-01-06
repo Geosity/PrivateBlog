@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 6.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+  <link rel="mask-icon" href="/images/favicon.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"ayresephemeres.top","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="介绍了文章《TransFusion Robust LiDAR-Camera Fusion for 3D Object Detection with Transformers》，一览如何利用Transformer模型融合摄像头的图像数据以及激光雷达的点云数据，以得到更佳的道路感知效果。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Transfusion模型介绍">
+<meta property="og:url" content="https://ayresephemeres.top/2022/08/30/Transfusion/index.html">
+<meta property="og:site_name" content="Dit moi, la petit ephémère">
+<meta property="og:description" content="介绍了文章《TransFusion Robust LiDAR-Camera Fusion for 3D Object Detection with Transformers》，一览如何利用Transformer模型融合摄像头的图像数据以及激光雷达的点云数据，以得到更佳的道路感知效果。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ayresephemeres.top/images/transfusion/Pasted%20image%2020220830091051.png">
+<meta property="og:image" content="https://ayresephemeres.top/images/transfusion/Pasted%20image%2020220830091112.png">
+<meta property="article:published_time" content="2022-08-30T01:04:56.485Z">
+<meta property="article:modified_time" content="2023-01-06T09:02:47.044Z">
+<meta property="article:author" content="Ayres Guan">
+<meta property="article:tag" content="Automatic Driving">
+<meta property="article:tag" content="Collaborative Perception">
+<meta property="article:tag" content="Transformer">
+<meta property="article:tag" content="Object Detection">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ayresephemeres.top/images/transfusion/Pasted%20image%2020220830091051.png">
+
+<link rel="canonical" href="https://ayresephemeres.top/2022/08/30/Transfusion/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Transfusion模型介绍 | Dit moi, la petit ephémère</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Dit moi, la petit ephémère</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">Qui nous laisse espérer le ciel, et nous attache à des pierres</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+  <div class="reading-progress-bar"></div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://ayresephemeres.top/2022/08/30/Transfusion/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.png">
+      <meta itemprop="name" content="Ayres Guan">
+      <meta itemprop="description" content="文理齐蓄，兼容并包。">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Dit moi, la petit ephémère">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Transfusion模型介绍
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-08-30 09:04:56" itemprop="dateCreated datePublished" datetime="2022-08-30T09:04:56+08:00">2022-08-30</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-01-06 17:02:47" itemprop="dateModified" datetime="2023-01-06T17:02:47+08:00">2023-01-06</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Paper/" itemprop="url" rel="index"><span itemprop="name">Paper</span></a>
+                </span>
+            </span>
+
+          
+            <div class="post-description">介绍了文章《TransFusion Robust LiDAR-Camera Fusion for 3D Object Detection with Transformers》，一览如何利用Transformer模型融合摄像头的图像数据以及激光雷达的点云数据，以得到更佳的道路感知效果。</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>作者：Xuyang Bai, Zeyu Hu, Xinge Zhu, Qingqiu Huang, Yilun Chen, Hongbo Fu and Chiew-Lan Tai<br>原文：<a target="_blank" rel="noopener" href="https://arxiv.org/pdf/2203.11496.pdf">戳我</a><br>代码：<a target="_blank" rel="noopener" href="https://github.com/XuyangBai/TransFusion">戳戳我</a><br><img src="/images/transfusion/Pasted image 20220830091051.png" alt=""></p>
+<p>本模型需要依赖一个3d和2d的backbone去分别提取lidar bev特征和相片特征。</p>
+<p>检测头由两个序列decoder组成：</p>
+<ol>
+<li>利用一堆稀疏的object queries，初始化3d的bounding box，这一层的decoder遵循相关输入与类别感知的规则进行初始化。</li>
+<li>第二层decoder负责联结、融合上一层的object queries以及其附带的initial prediction，生成更为优质的预测结果。</li>
+</ol>
+<p>建立了smca-在空间建模的交叉注意力机制，它囊括了locality inductive bias，并且帮助网络更好地与相关图片所对应的区域进行结合。</p>
+<h1 id="动机"><a href="#动机" class="headerlink" title="动机"></a>动机</h1><ul>
+<li>在诸如照明条件不良、传感器对齐错误的这种较差的图像获取条件下，怎样更为稳定地融合传感器数据，这一点还没有什么人研究。<ul>
+<li>现有的融合方式是通过<strong>标定矩阵（calibration matrices）</strong>的方法，将激光雷达返回的点数据与相机返回的图像像素进行硬关联。</li>
+<li>这种方法很容易因为获取的图像质量不高而导致很大的偏差。</li>
+</ul>
+</li>
+<li>光靠激光雷达很难识别小物体，它们可能也就只有几个点<ul>
+<li>但它们在高分辨率的图像里面还是很好识别的</li>
+</ul>
+</li>
+<li>现有的方法在回传的图片质量低下的时候，性能很糟糕<ul>
+<li>它们通常是通过<strong>拼接（concatenation）</strong>或者<strong>加和(addition)</strong>的方式进行融合</li>
+</ul>
+</li>
+<li>激光雷达回传的点数据忽略了图像的语义特征。</li>
+<li>硬关联的效果的好坏很大程度取决于两个传感器之间的校准质量。<ul>
+<li>传感器回传数据存在时空偏差，校准质量一般都高不了。</li>
+</ul>
+</li>
+</ul>
+<h1 id="创新点"><a href="#创新点" class="headerlink" title="创新点"></a>创新点</h1><ul>
+<li>利用3d backbone，将decoder</li>
+<li>软关联机制</li>
+</ul>
+<h1 id="实现路径"><a href="#实现路径" class="headerlink" title="实现路径"></a>实现路径</h1><h2 id="2d物体检测"><a href="#2d物体检测" class="headerlink" title="2d物体检测"></a>2d物体检测</h2><p>图像→ cnn→ embedding(object query)</p>
+<p>embedding + positional encoding → object query</p>
+<h2 id="Query-初始化"><a href="#Query-初始化" class="headerlink" title="Query 初始化"></a>Query 初始化</h2><h3 id="相关输入-input-dependent"><a href="#相关输入-input-dependent" class="headerlink" title="相关输入 input dependent"></a>相关输入 input dependent</h3><p>一般来说query position和输入的图像是没有关联的，要么是随机生成要么是通过机器学习得来。不过近期的研究表明，在object query的初始化上下功夫，可以_弥补单层模型与多层模型之间的差距_。</p>
+<p>所以这里作者提出了<strong>中心热力图（center heatmap）</strong> 策略对object query初始化，使得模型在只使用一层decoder的情况下，就能达到很不错的效果。</p>
+<p>先定义一个d维的lidar bev特征：</p>
+<p>$F_{L} \in \mathbb{R}^{X \times Y \times d}$</p>
+<p>接下来建立一个专门为类型预测建立的热力图：</p>
+<p>$\hat{S} \in \mathbb{R}^{ X \times Y \times K}$</p>
+<p>其中X*Y表征BEV的尺寸，K是类型数量。</p>
+<p>再将这个热力图视作对X_Y_K个候选对象，选择所有类别可能性最高的前N个作为initial query positions和query feature</p>
+<h3 id="属性感知-category-aware"><a href="#属性感知-category-aware" class="headerlink" title="属性感知 category aware"></a>属性感知 category aware</h3><p>在bev投影位面上的物体共享同一个坐标系，因此同一个类别之间的尺度方差较小，需要对每个object query进行类别嵌入（category-embedding)，确保obeject query可以被更为精确地感知。</p>
+<p>候选类别$S_{ijk}$，其中k表示第k个类别。</p>
+<p>具体实现方法：</p>
+<p>element-wise sum</p>
+<p>对象：query feature、category embedding</p>
+<p>category embedding：将one-hot category线性投影到$\mathbb{R}^d$而得到的向量</p>
+<h2 id="tf解码器及其前向传播网络"><a href="#tf解码器及其前向传播网络" class="headerlink" title="tf解码器及其前向传播网络"></a>tf解码器及其前向传播网络</h2><p>解码结构和detr一脉相承：</p>
+<ul>
+<li>object queries间进行自注意力计算，让不同候选对象形成成对关系。</li>
+<li>object query与特征（点云）间进行交叉注意力计算，让相关的互文信息汇聚到候选的对象上</li>
+<li>利用mlp将query position嵌入到d维位置编码中，使能推理进程</li>
+</ul>
+<p>N个object queries经过FFN后，解码为方框和标签。预测内容包含：</p>
+<ul>
+<li>中心点偏移</li>
+<li>偏航角</li>
+<li>x, y方向上的速度</li>
+<li>分类概率</li>
+</ul>
+<p>每一层解码器后面都会加计算loss</p>
+<h2 id="损失函数"><a href="#损失函数" class="headerlink" title="损失函数"></a>损失函数</h2><p>$C_{\text {match }}=\lambda_{1} L_{c l s}(p, \hat{p})+\lambda_{2} L_{r e g}(b, \hat{b})+\lambda_{3} L_{i o u}(b, \hat{b})$</p>
+<p>由分类、回归、intersection of union三个损失部分组成</p>
+<h1 id="query初始化"><a href="#query初始化" class="headerlink" title="query初始化"></a>query初始化</h1><p><img src="/images/transfusion/Pasted image 20220830091112.png" alt=""></p>
+<p>我们先在垂直方向上压缩了图片的特征，然后通过在激光雷达俯瞰特征上执行交叉注意力操作，将图像特征投影在俯瞰空间中。为了捕捉图像和其俯瞰定位之间的关系，每个图片都将分别被不同的多头注意力层处理。<br>先沿着h轴，进行maxpooling计算，让图像特征坍缩成条形并作为k和v，同时lidar在bev位面的投影特征作为q，三者进行多头注意力机制，计算得到融合后的bev特征就是初始的query</p>
+<h3 id="1-1-相关输入"><a href="#1-1-相关输入" class="headerlink" title="1.1 - 相关输入"></a>1.1 - 相关输入</h3><p>随机生成的query position输入模型时，因其不具备相关性，在检测目标物体的中心位置时，需要添加额外的decoder层才能让bounding box朝着实际的中心位置移动。</p>
+<p>近期的研究证明，如果想让只有一层的模型表现得和六层的一样好，就需要用一个更好的object query的初始化方法。</p>
+<h1 id="他文评述"><a href="#他文评述" class="headerlink" title="他文评述"></a>他文评述</h1><h3 id="Benchmarking-the-Robustness-of-LiDAR-Camera-Fusion-for-3D-Object-Detection"><a href="#Benchmarking-the-Robustness-of-LiDAR-Camera-Fusion-for-3D-Object-Detection" class="headerlink" title="Benchmarking the Robustness of LiDAR-Camera Fusion for 3D Object Detection"></a>Benchmarking the Robustness of LiDAR-Camera Fusion for 3D Object Detection</h3><p>深度融合的方法都是从一个统一空间内，为两种模式（2d、3d）都分别准备已经预训练好了的神经网络，从中提取两种模式的深度特征。这种统一空间一般选的都是俯瞰空间。</p>
+<p>tf评估了三种场景下，不同融合策略的稳定性，具体方法是将验证集分成白天和晚上，从中随机drop某几帧图片，再通过在camera到lidar的转移矩阵中，随机增加一些偏移量，造成lidar和camera无法有效对齐。</p>
+<p>tf忽略了lidar的噪音以及时间错位的情况。</p>
+<p>tf在实验中表现出了最优的稳定性，主要体现在它在对抗camera的噪音方面的表现堪称惊艳。</p>
+<h3 id="BEVFusion-multi-Task-Multi-Sensor-Fusion-with-Unified-BEV-Representation"><a href="#BEVFusion-multi-Task-Multi-Sensor-Fusion-with-Unified-BEV-Representation" class="headerlink" title="BEVFusion: multi-Task Multi-Sensor Fusion with Unified BEV Representation"></a>BEVFusion: multi-Task Multi-Sensor Fusion with Unified BEV Representation</h3><p>tf在3d空间中定义了object query，并且在此之上融合了图片特征。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Automatic-Driving/" rel="tag"># Automatic Driving</a>
+              <a href="/tags/Collaborative-Perception/" rel="tag"># Collaborative Perception</a>
+              <a href="/tags/Transformer/" rel="tag"># Transformer</a>
+              <a href="/tags/Object-Detection/" rel="tag"># Object Detection</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/2022/10/17/Multiscale%20complexity%20fluctuation%20behaviours%20of%20stochastic%20interacting%20cryptocurrency%20price%20model/" rel="next" title="基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model)">
+      基于随机接触模型的加密货币价格模型中的多尺度复杂波动行为(Multiscale complexity fluctuation behaviours of stochastic interacting cryptocurrency price model) <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%8A%A8%E6%9C%BA"><span class="nav-number">1.</span> <span class="nav-text">动机</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%88%9B%E6%96%B0%E7%82%B9"><span class="nav-number">2.</span> <span class="nav-text">创新点</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%AE%9E%E7%8E%B0%E8%B7%AF%E5%BE%84"><span class="nav-number">3.</span> <span class="nav-text">实现路径</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#2d%E7%89%A9%E4%BD%93%E6%A3%80%E6%B5%8B"><span class="nav-number">3.1.</span> <span class="nav-text">2d物体检测</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Query-%E5%88%9D%E5%A7%8B%E5%8C%96"><span class="nav-number">3.2.</span> <span class="nav-text">Query 初始化</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9B%B8%E5%85%B3%E8%BE%93%E5%85%A5-input-dependent"><span class="nav-number">3.2.1.</span> <span class="nav-text">相关输入 input dependent</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B1%9E%E6%80%A7%E6%84%9F%E7%9F%A5-category-aware"><span class="nav-number">3.2.2.</span> <span class="nav-text">属性感知 category aware</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tf%E8%A7%A3%E7%A0%81%E5%99%A8%E5%8F%8A%E5%85%B6%E5%89%8D%E5%90%91%E4%BC%A0%E6%92%AD%E7%BD%91%E7%BB%9C"><span class="nav-number">3.3.</span> <span class="nav-text">tf解码器及其前向传播网络</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8D%9F%E5%A4%B1%E5%87%BD%E6%95%B0"><span class="nav-number">3.4.</span> <span class="nav-text">损失函数</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#query%E5%88%9D%E5%A7%8B%E5%8C%96"><span class="nav-number">4.</span> <span class="nav-text">query初始化</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-1-%E7%9B%B8%E5%85%B3%E8%BE%93%E5%85%A5"><span class="nav-number">4.0.1.</span> <span class="nav-text">1.1 - 相关输入</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%BB%96%E6%96%87%E8%AF%84%E8%BF%B0"><span class="nav-number">5.</span> <span class="nav-text">他文评述</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Benchmarking-the-Robustness-of-LiDAR-Camera-Fusion-for-3D-Object-Detection"><span class="nav-number">5.0.1.</span> <span class="nav-text">Benchmarking the Robustness of LiDAR-Camera Fusion for 3D Object Detection</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#BEVFusion-multi-Task-Multi-Sensor-Fusion-with-Unified-BEV-Representation"><span class="nav-number">5.0.2.</span> <span class="nav-text">BEVFusion: multi-Task Multi-Sensor Fusion with Unified BEV Representation</span></a></li></ol></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Ayres Guan"
+      src="/images/avatar.png">
+  <p class="site-author-name" itemprop="name">Ayres Guan</p>
+  <div class="site-description" itemprop="description">文理齐蓄，兼容并包。</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">11</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">17</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Geosity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Geosity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:geositty@gmail.com" title="E-Mail → mailto:geositty@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://www.instagram.com/ayresguan.st/" title="Instagram → https:&#x2F;&#x2F;www.instagram.com&#x2F;ayresguan.st&#x2F;" rel="noopener" target="_blank"><i class="fab fa-instagram fa-fw"></i></a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Ayres Guan</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+  <script defer src="/lib/three/three.min.js"></script>
+    <script defer src="/lib/three/three-waves.min.js"></script>
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+      
+
+<script>
+  if (typeof MathJax === 'undefined') {
+    window.MathJax = {
+      loader: {
+        source: {
+          '[tex]/amsCd': '[tex]/amscd',
+          '[tex]/AMScd': '[tex]/amscd'
+        }
+      },
+      tex: {
+        inlineMath: {'[+]': [['$', '$']]},
+        tags: 'ams'
+      },
+      options: {
+        renderActions: {
+          findScript: [10, doc => {
+            document.querySelectorAll('script[type^="math/tex"]').forEach(node => {
+              const display = !!node.type.match(/; *mode=display/);
+              const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display);
+              const text = document.createTextNode('');
+              node.parentNode.replaceChild(text, node);
+              math.start = {node: text, delim: '', n: 0};
+              math.end = {node: text, delim: '', n: 0};
+              doc.math.push(math);
+            });
+          }, '', false],
+          insertedScript: [200, () => {
+            document.querySelectorAll('mjx-container').forEach(node => {
+              let target = node.parentNode;
+              if (target.nodeName.toLowerCase() === 'li') {
+                target.parentNode.classList.add('has-jax');
+              }
+            });
+          }, '', false]
+        }
+      }
+    };
+    (function () {
+      var script = document.createElement('script');
+      script.src = '//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+      script.defer = true;
+      document.head.appendChild(script);
+    })();
+  } else {
+    MathJax.startup.document.state(0);
+    MathJax.texReset();
+    MathJax.typeset();
+  }
+</script>
+
+    
+
+  
+
+</body>
+</html>
